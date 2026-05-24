@@ -1,0 +1,60 @@
+name: Build Mobile
+
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: 'Platform'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - android
+          - ios
+
+env:
+  NODE_VERSION: '20'
+
+jobs:
+  build-android:
+    name: Build Android
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+      - run: npm ci
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v2
+      - name: Build APK
+        run: |
+          cd apps/web
+          npm run build
+          cd ../..
+          echo "Android build configured - add Cordova/Capacitor for actual build"
+
+  build-ios:
+    name: Build iOS
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - run: npm ci
+      - name: Build iOS
+        run: |
+          cd apps/web
+          npm run build
+          cd ../..
+          echo "iOS build configured - add Cordova/Capacitor for actual build"
+      - name: Upload IPA
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-app
+          path: apps/ios/*.ipa
+          retention-days: 7

@@ -1,0 +1,60 @@
+name: Build Desktop
+
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: 'Platform to build'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - linux
+          - windows
+          - macos
+
+env:
+  RUST_VERSION: '1.75'
+  NODE_VERSION: '20'
+
+jobs:
+  build-tauri:
+    name: Build Tauri (${{ matrix.platform }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            platform: linux
+            target: ''
+          - os: windows-latest
+            platform: windows
+            target: 'x86_64-pc-windows-msvc'
+          - os: macos-latest
+            platform: macos
+            target: 'x86_64-apple-darwin'
+          - os: macos-latest
+            platform: ios
+            target: 'aarch64-apple-ios'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          targets: ${{ matrix.target }}
+      - uses: tauri-apps/tauri-action@v0
+        with:
+          args: --target ${{ matrix.target }}
+      - name: Upload artifacts
+        if: matrix.platform != 'ios'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.platform }}-bundles
+          path: apps/desktop/src-tauri/target/${{ matrix.target }}/release/bundle/*
+          retention-days: 7
