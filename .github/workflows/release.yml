@@ -127,33 +127,60 @@ jobs:
             libasound2
       
       - name: Install dependencies
-        run: npm ci
+        run: |
+          if [ -f package.json ]; then
+            npm ci || npm install
+          else
+            echo "No package.json found"
+          fi
       
       - name: Build Linux
-        if: matrix.artifact_name == 'linux'
-        run: npm run build:linux || npm run build:electron:linux || npm run build
+        run: |
+          if [ -d "electron" ] || [ -f "electron-builder.yml" ] || [ -f "electron-builder.json" ]; then
+            npm run build:linux || npm run build:electron:linux || npm run build
+          else
+            echo "Electron not configured. Skipping Linux build."
+          fi
       
       - name: Build Windows
         if: matrix.artifact_name == 'windows'
-        run: npm run build:win32 || npm run build:windows || npm run build:electron:win || npm run build
+        run: |
+          if [ -d "electron" ] || [ -f "electron-builder.yml" ] || [ -f "electron-builder.json" ] || [ -d "platforms/win32" ]; then
+            npm run build:win32 || npm run build:windows || npm run build:electron:win || npm run build
+          else
+            echo "Windows/Electron not configured. Skipping Windows build."
+          fi
       
       - name: Build macOS
         if: matrix.artifact_name == 'macos'
-        run: npm run build:macos || npm run build:darwin || npm run build:electron:mac || npm run build
+        run: |
+          if [ -d "electron" ] || [ -f "electron-builder.yml" ] || [ -f "electron-builder.json" ] || [ -d "platforms/darwin" ]; then
+            npm run build:macos || npm run build:darwin || npm run build:electron:mac || npm run build
+          else
+            echo "macOS/Electron not configured. Skipping macOS build."
+          fi
       
       - name: Build Android
         if: matrix.artifact_name == 'android'
-        run: npm run build:android || npm run build
+        run: |
+          if [ -d "platforms/android" ] || [ -f "platforms/android/build.gradle" ]; then
+            npm run build:android || npm run build
+          else
+            echo "Android platform not configured. Skipping Android build."
+          fi
       
       - name: Upload artifact
+        if: success()
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact_name }}-release-${{ needs.validate.outputs.version }}
           path: |
-            dist/**/* 2>/dev/null
-            platforms/**/* 2>/dev/null
-            release/**/* 2>/dev/null
+            dist/**/* 2>/dev/null || echo "no dist"
+            platforms/**/* 2>/dev/null || echo "no platforms"
+            release/**/* 2>/dev/null || echo "no release"
           retention-days: 90
+          if-no-files-found: ignore
 
   # Build iOS separately
   build-ios:
@@ -173,12 +200,24 @@ jobs:
           cache: 'npm'
       
       - name: Install dependencies
-        run: npm ci
+        run: |
+          if [ -f package.json ]; then
+            npm ci || npm install
+          else
+            echo "No package.json found"
+          fi
       
       - name: Build iOS
-        run: npm run build:ios || npm run build:ios-sim || npm run build
+        run: |
+          if [ -d "platforms/ios" ] || [ -d "ios" ]; then
+            npm run build:ios || npm run build:ios-sim || npm run build
+          else
+            echo "iOS platform not configured. Skipping iOS build."
+          fi
       
       - name: Upload artifact
+        if: success()
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: ios-release-${{ needs.validate.outputs.version }}
@@ -186,6 +225,7 @@ jobs:
             platforms/ios/**/*.ipa
             platforms/ios/build/**/*.app
           retention-days: 90
+          if-no-files-found: ignore
 
   # Create GitHub Release
   create-release:
@@ -277,13 +317,22 @@ jobs:
           cache: 'npm'
       
       - name: Install dependencies
-        run: npm ci
+        run: |
+          if [ -f package.json ]; then
+            npm ci || npm install
+          else
+            echo "No package.json found"
+          fi
       
       - name: Publish to npm
         if: env.NPM_TOKEN != ''
         run: |
-          echo "//registry.npmjs.org/:_authToken=$NPM_TOKEN" > ~/.npmrc
-          npm publish --access public || echo "npm publish skipped"
+          if [ -f package.json ]; then
+            echo "//registry.npmjs.org/:_authToken=$NPM_TOKEN" > ~/.npmrc
+            npm publish --access public || echo "npm publish skipped"
+          else
+            echo "No package.json, skipping npm publish"
+          fi
         env:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
 

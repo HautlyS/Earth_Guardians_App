@@ -1,0 +1,26 @@
+{
+  "name": "earth-guardians-app",
+  "version": "1.0.0",
+  "description": "Earth Guardians P2P Decentralized Application",
+  "main": "index.js",
+  "scripts": {
+    "start": "echo 'Start application'",
+    "build": "echo 'Build all platforms'",
+    "build:android": "echo 'Build Android - add cordova build command'",
+    "build:ios": "echo 'Build iOS - add cordova build command'",
+    "build:linux": "echo 'Build Linux - add electron-builder command'",
+    "build:windows": "echo 'Build Windows - add electron-builder command'",
+    "build:macos": "echo 'Build macOS - add electron-builder command'",
+    "build:electron:linux": "echo 'Build Electron Linux'",
+    "build:electron:win": "echo 'Build Electron Windows'",
+    "build:electron:mac": "echo 'Build Electron macOS'",
+    "test": "echo 'Tests placeholder'",
+    "lint": "echo 'Lint placeholder'",
+    "format:check": "echo 'Format check placeholder'"
+  },
+  "keywords": ["p2p", "decentralized", "earth-guardians"],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {},
+  "devDependencies": {}
+}

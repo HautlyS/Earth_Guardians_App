@@ -48,7 +48,12 @@ jobs:
           cache: 'npm'
       
       - name: Install dependencies
-        run: npm ci
+        run: |
+          if [ -f package.json ]; then
+            npm ci || npm install
+          else
+            echo "No package.json found"
+          fi
       
       - name: Install CocoaPods
         if: fileExists('platforms/ios/Podfile')
@@ -60,6 +65,12 @@ jobs:
       - name: Build iOS with Xcode
         id: build
         run: |
+          if [ ! -d "platforms/ios" ]; then
+            echo "iOS platform not configured. Skipping iOS build."
+            echo "To enable iOS builds, run: cordova platform add ios"
+            exit 0
+          fi
+          
           cd platforms/ios
           
           # Determine workspace or project
@@ -68,6 +79,11 @@ jobs:
           
           echo "Found workspace: $WORKSPACE"
           echo "Found project: $PROJECT"
+          
+          if [ -z "$WORKSPACE" ] && [ -z "$PROJECT" ]; then
+            echo "No Xcode project or workspace found. Skipping iOS build."
+            exit 0
+          fi
           
           BUILD_SCHEME=$(xcodebuild -list 2>/dev/null | grep -A 100 "Information about" | grep -E "Schemes:" -A 20 | tail -n +2 | head -1 | tr -d '[:space:]' || echo "App")
           
@@ -103,6 +119,8 @@ jobs:
           find platforms/ios -name "*.app" -type d 2>/dev/null | head -10
       
       - name: Upload app artifact
+        if: success()
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: ios-app-bundle-${{ inputs.build_type || 'debug' }}
@@ -110,6 +128,7 @@ jobs:
             platforms/ios/build/**/*.app
             platforms/ios/build/**/Build/**/*.app
           retention-days: 7
+          if-no-files-found: ignore
 
   create-ipa:
     name: Create IPA

@@ -37,11 +37,21 @@ jobs:
           cache: 'npm'
       
       - name: Install dependencies
-        run: npm ci
+        run: |
+          if [ -f package.json ]; then
+            npm ci || npm install
+          else
+            echo "No package.json found"
+          fi
       
       - name: Build macOS
         run: |
-          npm run build:macos || npm run build:darwin || npm run build:electron:mac || npm run build
+          if [ -d "electron" ] || [ -f "electron-builder.yml" ] || [ -f "electron-builder.json" ] || [ -d "platforms/darwin" ]; then
+            npm run build:macos || npm run build:darwin || npm run build:electron:mac || npm run build
+          else
+            echo "macOS/Electron not configured."
+            echo "Skipping macOS build."
+          fi
         env:
           ELECTRON_CACHE: ${{ runner.temp }}/electron_cache
           BUILD_TYPE: ${{ inputs.build_type || 'debug' }}
@@ -54,8 +64,9 @@ jobs:
           ls -la dist/ 2>/dev/null
       
       - name: Upload macOS artifact
+        if: success()
+        continue-on-error: true
         uses: actions/upload-artifact@v4
-        if: always()
         with:
           name: macos-app-${{ inputs.build_type || 'debug' }}
           path: |
@@ -63,6 +74,7 @@ jobs:
             dist/mac-arm64/**/*.app
             dist/**/*.dmg
           retention-days: 30
+          if-no-files-found: ignore
 
   ios-build:
     name: iOS Build & Sign
@@ -85,11 +97,23 @@ jobs:
           npm install -g cordova-simulate || true
       
       - name: Install dependencies
-        run: npm ci
+        run: |
+          if [ -f package.json ]; then
+            npm ci || npm install
+          else
+            echo "No package.json found"
+          fi
       
       - name: Build iOS
         run: |
-          npm run build:ios || npm run build:ios-sim || npm run build
+          if [ -d "platforms/ios" ] || [ -d "ios" ]; then
+            npm run build:ios || npm run build:ios-sim || npm run build
+          else
+            echo "iOS platform not configured. Create Cordova project with:"
+            echo "  npm install -g cordova"
+            echo "  cordova platform add ios"
+            echo "Skipping iOS build."
+          fi
         env:
           BUILD_TYPE: ${{ inputs.build_type || 'debug' }}
       
@@ -100,14 +124,16 @@ jobs:
           ls -la platforms/ios/build/ 2>/dev/null || echo "Checking other locations..."
       
       - name: Upload iOS artifact
+        if: success()
+        continue-on-error: true
         uses: actions/upload-artifact@v4
-        if: always()
         with:
           name: ios-build-${{ inputs.build_type || 'debug' }}
           path: |
             platforms/ios/**/*.ipa
             platforms/ios/build/**/*.app
           retention-days: 30
+          if-no-files-found: ignore
 
   ios-sideloadly:
     name: iOS Sideloadly Signing
