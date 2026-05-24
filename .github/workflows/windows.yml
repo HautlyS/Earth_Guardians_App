@@ -1,0 +1,61 @@
+name: Windows Build
+
+on:
+  push:
+    branches: [main, develop, 'release/**']
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: 'Build type'
+        required: true
+        default: 'debug'
+        type: choice
+        options:
+          - debug
+          - release
+
+env:
+  NODE_VERSION: '18'
+
+jobs:
+  windows-build:
+    name: Windows Build (${{ inputs.build_type || 'debug' }})
+    runs-on: windows-latest
+    timeout-minutes: 60
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Build Windows
+        run: |
+          npm run build:win32 || npm run build:windows || npm run build:electron:win || npm run build
+        env:
+          ELECTRON_CACHE: ${{ runner.temp }}/electron_cache
+          BUILD_TYPE: ${{ inputs.build_type || 'debug' }}
+      
+      - name: Verify Windows build output
+        run: |
+          echo "Build output:"
+          Get-ChildItem -Path . -Filter "*.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object FullName, Length | Format-Table -AutoSize
+      
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-exe-${{ inputs.build_type || 'debug' }}
+          path: |
+            dist/**/*.exe
+            release/**/*.exe
+          retention-days: 30

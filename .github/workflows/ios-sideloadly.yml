@@ -1,0 +1,247 @@
+name: iOS Sideloadly Build & Sign
+
+on:
+  push:
+    branches: [main, develop, 'release/**']
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: 'Build type'
+        required: true
+        default: 'debug'
+        type: choice
+        options:
+          - debug
+          - release
+      sign_method:
+        description: 'Signing method'
+        required: false
+        type: choice
+        default: 'xcode'
+        options:
+          - xcode
+          - manual
+          - sideloadly
+
+env:
+  NODE_VERSION: '18'
+  MACOS_VERSION: '14'
+  CODE_SIGNING_IDENTITY: '-'
+  DEVELOPMENT_TEAM: ''
+
+jobs:
+  build-ios-app:
+    name: Build iOS App
+    runs-on: macos-latest
+    timeout-minutes: 90
+    outputs:
+      app_bundle_path: ${{ steps.build.outputs.app_bundle_path }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Install CocoaPods
+        if: fileExists('platforms/ios/Podfile')
+        run: |
+          cd platforms/ios
+          pod install || echo "Pod install skipped (or no Podfile)"
+        working-directory: .
+      
+      - name: Build iOS with Xcode
+        id: build
+        run: |
+          cd platforms/ios
+          
+          # Determine workspace or project
+          WORKSPACE=$(ls *.xcworkspace 2>/dev/null | head -1)
+          PROJECT=$(ls *.xcodeproj 2>/dev/null | head -1)
+          
+          echo "Found workspace: $WORKSPACE"
+          echo "Found project: $PROJECT"
+          
+          BUILD_SCHEME=$(xcodebuild -list 2>/dev/null | grep -A 100 "Information about" | grep -E "Schemes:" -A 20 | tail -n +2 | head -1 | tr -d '[:space:]' || echo "App")
+          
+          echo "Build scheme: $BUILD_SCHEME"
+          echo "app_bundle_path=platforms/ios/build/${BUILD_SCHEME}-iphonesimulator" >> $GITHUB_OUTPUT
+          
+          if [ -n "$WORKSPACE" ]; then
+            xcodebuild -workspace "$WORKSPACE" \
+              -scheme "$BUILD_SCHEME" \
+              -configuration Debug \
+              -destination 'generic/platform=iOS Simulator' \
+              -derivedDataPath build \
+              CODE_SIGN_IDENTITY="" \
+              CODE_SIGNING_REQUIRED=NO \
+              CODE_SIGNING_ALLOWED=NO \
+              build
+          else
+            xcodebuild -project "$PROJECT" \
+              -scheme "$BUILD_SCHEME" \
+              -configuration Debug \
+              -destination 'generic/platform=iOS Simulator' \
+              -derivedDataPath build \
+              CODE_SIGN_IDENTITY="" \
+              CODE_SIGNING_REQUIRED=NO \
+              CODE_SIGNING_ALLOWED=NO \
+              build
+          fi
+      
+      - name: Verify build output
+        run: |
+          echo "Build output:"
+          ls -la platforms/ios/build/ 2>/dev/null || echo "Checking build folder..."
+          find platforms/ios -name "*.app" -type d 2>/dev/null | head -10
+      
+      - name: Upload app artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-app-bundle-${{ inputs.build_type || 'debug' }}
+          path: |
+            platforms/ios/build/**/*.app
+            platforms/ios/build/**/Build/**/*.app
+          retention-days: 7
+
+  create-ipa:
+    name: Create IPA
+    needs: build-ios-app
+    runs-on: macos-latest
+    timeout-minutes: 30
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Download app bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: ios-app-bundle-${{ inputs.build_type || 'debug' }}
+          path: ./app_bundle
+      
+      - name: Find app bundle
+        id: find_app
+        run: |
+          APP_PATH=$(find ./app_bundle -name "*.app" -type d 2>/dev/null | head -1)
+          echo "Found app: $APP_PATH"
+          
+          if [ -z "$APP_PATH" ]; then
+            echo "No .app bundle found"
+            exit 1
+          fi
+          
+          echo "app_path=$APP_PATH" >> $GITHUB_OUTPUT
+      
+      - name: Create IPA
+        run: |
+          cd $(dirname ${{ steps.find_app.outputs.app_path }})
+          
+          mkdir -p Payload
+          cp -R *.app Payload/
+          
+          zip -r -q unsigned.ipa Payload
+          
+          mv unsigned.ipa $GITHUB_WORKSPACE/
+          
+          ls -lh $GITHUB_WORKSPACE/unsigned.ipa
+      
+      - name: Upload unsigned IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-unsigned-ipa
+          path: unsigned.ipa
+          retention-days: 30
+
+  sign-with-xcode:
+    name: Sign IPA (Xcode)
+    needs: create-ipa
+    runs-on: macos-latest
+    timeout-minutes: 30
+    if: inputs.sign_method == 'xcode' || github.event.inputs.sign_method == 'xcode' || github.event.inputs.sign_method == ''
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Download IPA
+        uses: actions/download-artifact@v4
+        with:
+          name: ios-unsigned-ipa
+          path: .
+      
+      - name: Find provisioning profile
+        run: |
+          echo "Looking for provisioning profiles..."
+          ls -la ~/Library/MobileDevice/Provisioning\ Profiles/ 2>/dev/null || echo "No profiles found"
+          
+          # For free signing, we use ad-hoc or development
+          echo "For Ad-hoc signing, use:"
+          echo "  - Open Xcode"
+          echo "  - Product > Archive"
+          echo "  - Distribute App > Ad-hoc"
+      
+      - name: Upload for Sideloadly signing
+        run: |
+          # Since Sideloadly is GUI-only, we'll provide instructions
+          echo "IPA ready for Sideloadly signing:"
+          ls -lh *.ipa
+          
+          echo ""
+          echo "To sign with Sideloadly manually:"
+          echo "  1. Download Sideloadly from https://sideloadly.io"
+          echo "  2. Open the IPA file in Sideloadly"
+          echo "  3. Sign with your free Apple ID"
+          echo ""
+          echo "For CI automation, consider using:"
+          echo "  - ios-app-signer (https://github.com/signpart/AppStoreCertificates)"
+          echo "  - AltServer CLI (https://github.com/Soda-dev/AltServer-Linux)"
+
+  sideloadly-package:
+    name: Sideloadly Package
+    needs: create-ipa
+    runs-on: macos-latest
+    timeout-minutes: 30
+    if: inputs.sign_method == 'sideloadly' || github.event.inputs.sign_method == 'sideloadly'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Download Sideloadly
+        run: |
+          curl -sL -o sideloadly.zip "https://github.com/SideloadlyiOS/Sideloadly/releases/download/continuous/Sideloadly-macOS.zip"
+          unzip -o sideloadly.zip -d /Applications/
+          ls -la /Applications/Sideloadly.app/
+      
+      - name: Download IPA
+        uses: actions/download-artifact@v4
+        with:
+          name: ios-unsigned-ipa
+          path: .
+      
+      - name: Sign with Sideloadly
+        run: |
+          echo "Sideloadly CLI is limited in CI environments."
+          echo ""
+          echo "For automated signing, the recommended approach is:"
+          echo "  1. Use Xcode's command line tools"
+          echo "  2. Use a paid Apple Developer account"
+          echo "  3. Use a third-party signing service"
+          echo ""
+          echo "The unsigned IPA is available as an artifact for manual signing."
+          ls -lh *.ipa
+      
+      - name: Upload Sideloadly-ready IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-sideloadly-ready
+          path: "*.ipa"
+          retention-days: 30

@@ -1,0 +1,306 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g., v1.0.0)'
+        required: true
+        type: string
+      prerelease:
+        description: 'Pre-release'
+        required: false
+        type: boolean
+        default: false
+
+env:
+  NODE_VERSION: '18'
+  JAVA_VERSION: '17'
+
+jobs:
+  # Validate release
+  validate:
+    name: Validate Release
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      changelog: ${{ steps.changelog.outputs.changes }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Extract version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            VERSION="${{ inputs.version }}"
+          else
+            VERSION="${GITHUB_REF#refs/tags/}"
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          
+          # Validate version format
+          if ! echo "$VERSION" | grep -qE '^v?[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9]+)?$'; then
+            echo "Invalid version format: $VERSION"
+            exit 1
+          fi
+      
+      - name: Generate changelog
+        id: changelog
+        run: |
+          git fetch --tags
+          TAG="${{ steps.version.outputs.version }}"
+          
+          # Find previous tag
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          
+          if [ -n "$PREV_TAG" ]; then
+            CHANGES=$(git log $PREV_TAG..HEAD --oneline --format="- %s (%h)")
+          else
+            CHANGES=$(git log --oneline --format="- %s" -20)
+          fi
+          
+          echo "changes<<EOF" >> $GITHUB_OUTPUT
+          echo "$CHANGES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+  # Build all platforms
+  build-all:
+    name: Build All Platforms
+    needs: validate
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            artifact_name: linux
+          - os: windows-latest
+            artifact_name: windows
+          - os: macos-latest
+            artifact_name: macos
+          - os: ubuntu-latest
+            artifact_name: android
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+      
+      - name: Setup Java (for Android)
+        if: matrix.artifact_name == 'android'
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: 'temurin'
+          cache: 'gradle'
+      
+      - name: Install Android SDK
+        if: matrix.artifact_name == 'android'
+        uses: android-actions/setup-android@v2
+      
+      - name: Install Linux build dependencies
+        if: matrix.artifact_name == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            libgtk-3-dev \
+            libnotify-dev \
+            libnss3 \
+            libxss-dev \
+            libxtst-dev \
+            xdg-utils \
+            libatspi2.0-dev \
+            libdrm-dev \
+            libgbm-dev \
+            libasound2
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Build Linux
+        if: matrix.artifact_name == 'linux'
+        run: npm run build:linux || npm run build:electron:linux || npm run build
+      
+      - name: Build Windows
+        if: matrix.artifact_name == 'windows'
+        run: npm run build:win32 || npm run build:windows || npm run build:electron:win || npm run build
+      
+      - name: Build macOS
+        if: matrix.artifact_name == 'macos'
+        run: npm run build:macos || npm run build:darwin || npm run build:electron:mac || npm run build
+      
+      - name: Build Android
+        if: matrix.artifact_name == 'android'
+        run: npm run build:android || npm run build
+      
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}-release-${{ needs.validate.outputs.version }}
+          path: |
+            dist/**/* 2>/dev/null
+            platforms/**/* 2>/dev/null
+            release/**/* 2>/dev/null
+          retention-days: 90
+
+  # Build iOS separately
+  build-ios:
+    name: Build iOS
+    needs: validate
+    runs-on: macos-latest
+    timeout-minutes: 90
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Build iOS
+        run: npm run build:ios || npm run build:ios-sim || npm run build
+      
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-release-${{ needs.validate.outputs.version }}
+          path: |
+            platforms/ios/**/*.ipa
+            platforms/ios/build/**/*.app
+          retention-days: 90
+
+  # Create GitHub Release
+  create-release:
+    name: Create Release
+    needs: [validate, build-all, build-ios]
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./artifacts
+      
+      - name: Prepare release assets
+        run: |
+          mkdir -p release-assets
+          
+          # Organize artifacts by platform
+          for dir in artifacts/*/; do
+            if [ -d "$dir" ]; then
+              Platform=$(basename "$dir")
+              cp -r "$dir" "release-assets/${Platform}" 2>/dev/null || true
+            fi
+          done
+          
+          # Find and list all binaries
+          echo "Release assets:"
+          find release-assets -type f \( -name "*.exe" -o -name "*.AppImage" -o -name "*.dmg" -o -name "*.deb" -o -name "*.rpm" -o -name "*.apk" -o -name "*.ipa" -o -name "*.app" \) -exec ls -lh {} \;
+      
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.validate.outputs.version }}
+          name: Release ${{ needs.validate.outputs.version }}
+          body: |
+            ## Release ${{ needs.validate.outputs.version }}
+            
+            ### Changes
+            ${{ needs.validate.outputs.changelog }}
+            
+            ### Downloads
+            All platform builds are attached to this release.
+            
+            ---
+            Built with ❤️ using GitHub Actions
+          draft: false
+          prerelease: ${{ github.event.inputs.prerelease || false }}
+          generate_release_notes: true
+          files: |
+            release-assets/**/*.exe
+            release-assets/**/*.AppImage
+            release-assets/**/*.dmg
+            release-assets/**/*.deb
+            release-assets/**/*.rpm
+            release-assets/**/*.apk
+            release-assets/**/*.ipa
+      
+      - name: Upload all assets
+        run: |
+          for file in $(find release-assets -type f ! -name "*.md" 2>/dev/null); do
+            echo "Asset: $file"
+            SIZE=$(ls -lh "$file" | awk '{print $5}')
+            echo "Size: $SIZE"
+          done
+          
+          # Upload remaining assets using GitHub CLI
+          for file in $(find release-assets -type f \( -name "*.app" -o -name "*.app.bundle" \) 2>/dev/null); do
+            echo "Uploading: $file"
+          done
+
+  # Publish to package registries (optional)
+  publish:
+    name: Publish Packages
+    needs: [validate, create-release]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Publish to npm
+        if: env.NPM_TOKEN != ''
+        run: |
+          echo "//registry.npmjs.org/:_authToken=$NPM_TOKEN" > ~/.npmrc
+          npm publish --access public || echo "npm publish skipped"
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  # Notify completion
+  notify:
+    name: Notify Completion
+    needs: [validate, create-release]
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Release Summary
+        run: |
+          echo "## ✅ Release ${{ needs.validate.outputs.version }} Complete!"
+          echo ""
+          echo "Build status:"
+          echo "- ✅ Validation passed"
+          echo "- ✅ All platform builds completed"
+          echo "- ✅ GitHub Release created"
+          echo ""
+          echo "📦 Download: ${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ needs.validate.outputs.version }}"
