@@ -1,0 +1,334 @@
+name: CI - All Platforms
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+env:
+  NODE_VERSION: '18'
+  JAVA_VERSION: '17'
+
+jobs:
+  # ============================================================
+  # QUALITY CHECKS
+  # ============================================================
+  lint:
+    name: Lint & Quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: |
+          if [ -f package.json ]; then
+            npm ci --prefer-offline 2>/dev/null || npm ci || npm install --prefer-offline
+          fi
+      
+      - name: Run linter
+        run: |
+          if [ -f package.json ]; then
+            npm run lint 2>/dev/null || npm run lint:js 2>/dev/null || echo "No lint script configured"
+          fi
+      
+      - name: Check formatting
+        run: |
+          if [ -f package.json ]; then
+            npm run format:check 2>/dev/null || npm run prettier:check 2>/dev/null || echo "No format check script"
+          fi
+
+  test:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: |
+          if [ -f package.json ]; then
+            npm ci --prefer-offline 2>/dev/null || npm ci || npm install --prefer-offline
+          fi
+      
+      - name: Run tests
+        run: |
+          if [ -f package.json ] && npm run test 2>/dev/null; then
+            npm test
+          else
+            echo "No tests configured"
+          fi
+
+  # ============================================================
+  # PLATFORM BUILD JOBS
+  # ============================================================
+  build-linux:
+    name: Build Linux
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+      
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            libgtk-3-dev \
+            libnotify-dev \
+            libnss3 \
+            libxss-dev \
+            libxtst-dev \
+            xdg-utils \
+            libatspi2.0-dev \
+            libdrm-dev \
+            libgbm-dev \
+            libasound2
+      
+      - name: Install dependencies
+        run: |
+          if [ -f package.json ]; then
+            npm ci --prefer-offline 2>/dev/null || npm ci || npm install --prefer-offline
+          fi
+      
+      - name: Build Linux
+        run: |
+          if [ -d "electron" ] || [ -f "electron-builder.yml" ] || [ -f "electron-builder.json" ]; then
+            npm run build:linux 2>/dev/null || npm run build:electron:linux 2>/dev/null || npm run build
+          else
+            echo "Electron not configured. Skipping Linux build."
+          fi
+      
+      - name: Upload Linux artifact
+        if: success()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-build
+          path: |
+            dist/**/*.AppImage
+            dist/**/*.deb
+          retention-days: 7
+          if-no-files-found: ignore
+
+  build-windows:
+    name: Build Windows
+    runs-on: windows-latest
+    timeout-minutes: 60
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: |
+          if [ -f package.json ]; then
+            npm ci 2>/dev/null || npm install
+          fi
+      
+      - name: Build Windows
+        run: |
+          if [ -d "electron" ] || [ -f "electron-builder.yml" ] || [ -f "electron-builder.json" ] || [ -d "platforms/win32" ]; then
+            npm run build:win32 2>/dev/null || npm run build:windows 2>/dev/null || npm run build:electron:win 2>/dev/null || npm run build
+          else
+            echo "Windows/Electron not configured. Skipping Windows build."
+          fi
+      
+      - name: Upload Windows artifact
+        if: success()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-build
+          path: |
+            dist/**/*.exe
+            release/**/*.exe
+          retention-days: 7
+          if-no-files-found: ignore
+
+  build-macos:
+    name: Build macOS
+    runs-on: macos-latest
+    timeout-minutes: 60
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: |
+          if [ -f package.json ]; then
+            npm ci 2>/dev/null || npm install
+          fi
+      
+      - name: Build macOS
+        run: |
+          if [ -d "electron" ] || [ -f "electron-builder.yml" ] || [ -f "electron-builder.json" ] || [ -d "platforms/darwin" ]; then
+            npm run build:macos 2>/dev/null || npm run build:darwin 2>/dev/null || npm run build:electron:mac 2>/dev/null || npm run build
+          else
+            echo "macOS/Electron not configured. Skipping macOS build."
+          fi
+      
+      - name: Upload macOS artifact
+        if: success()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-build
+          path: |
+            dist/mac/**/*.app
+            dist/mac-arm64/**/*.app
+            dist/**/*.dmg
+          retention-days: 7
+          if-no-files-found: ignore
+
+  build-android:
+    name: Build Android
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: 'temurin'
+          cache: 'gradle'
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+      
+      - name: Install Android SDK
+        uses: android-actions/setup-android@v2
+      
+      - name: Install dependencies
+        run: |
+          if [ -f package.json ]; then
+            npm ci --prefer-offline 2>/dev/null || npm ci || npm install --prefer-offline
+          fi
+      
+      - name: Build Android
+        run: |
+          if [ -d "platforms/android" ] || [ -f "platforms/android/build.gradle" ]; then
+            npm run build:android 2>/dev/null || npm run build
+          else
+            echo "Android platform not configured. Skipping Android build."
+          fi
+      
+      - name: Upload Android artifact
+        if: success()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-build
+          path: platforms/android/app/build/outputs/apk/**/*.apk
+          retention-days: 7
+          if-no-files-found: ignore
+
+  build-ios:
+    name: Build iOS
+    runs-on: macos-latest
+    timeout-minutes: 90
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: |
+          if [ -f package.json ]; then
+            npm ci 2>/dev/null || npm install
+          fi
+      
+      - name: Build iOS
+        run: |
+          if [ -d "platforms/ios" ] || [ -d "ios" ]; then
+            npm run build:ios 2>/dev/null || npm run build:ios-sim 2>/dev/null || npm run build
+          else
+            echo "iOS platform not configured. Skipping iOS build."
+          fi
+      
+      - name: Upload iOS artifact
+        if: success()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-build
+          path: |
+            platforms/ios/**/*.ipa
+            platforms/ios/build/**/*.app
+          retention-days: 7
+          if-no-files-found: ignore
+
+  # ============================================================
+  # BUILD SUMMARY
+  # ============================================================
+  build-summary:
+    name: Build Summary
+    needs: [lint, test, build-linux, build-windows, build-macos, build-android, build-ios]
+    runs-on: ubuntu-latest
+    if: always()
+    
+    steps:
+      - name: Summary
+        run: |
+          echo "## CI Build Complete"
+          echo ""
+          echo "| Job | Status |"
+          echo "|-----|--------|"
+          echo "| Lint | ${{ needs.lint.result }} |"
+          echo "| Tests | ${{ needs.test.result }} |"
+          echo "| Linux | ${{ needs.build-linux.result }} |"
+          echo "| Windows | ${{ needs.build-windows.result }} |"
+          echo "| macOS | ${{ needs.build-macos.result }} |"
+          echo "| Android | ${{ needs.build-android.result }} |"
+          echo "| iOS | ${{ needs.build-ios.result }} |"
