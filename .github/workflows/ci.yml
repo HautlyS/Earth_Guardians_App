@@ -27,12 +27,11 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
       
       - name: Install dependencies
         run: |
           if [ -f package.json ]; then
-            npm ci --prefer-offline 2>/dev/null || npm ci || npm install --prefer-offline
+            npm ci 2>/dev/null || npm install
           fi
       
       - name: Run linter
@@ -60,12 +59,11 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
       
       - name: Install dependencies
         run: |
           if [ -f package.json ]; then
-            npm ci --prefer-offline 2>/dev/null || npm ci || npm install --prefer-offline
+            npm ci 2>/dev/null || npm install
           fi
       
       - name: Run tests
@@ -92,7 +90,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
       
       - name: Install Linux build dependencies
         run: |
@@ -113,7 +110,7 @@ jobs:
       - name: Install dependencies
         run: |
           if [ -f package.json ]; then
-            npm ci --prefer-offline 2>/dev/null || npm ci || npm install --prefer-offline
+            npm ci 2>/dev/null || npm install
           fi
       
       - name: Build Linux
@@ -149,7 +146,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
       
       - name: Install dependencies
         run: |
@@ -190,7 +186,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
       
       - name: Install dependencies
         run: |
@@ -233,13 +228,11 @@ jobs:
         with:
           java-version: ${{ env.JAVA_VERSION }}
           distribution: 'temurin'
-          cache: 'gradle'
       
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
       
       - name: Install Android SDK
         uses: android-actions/setup-android@v2
@@ -247,7 +240,7 @@ jobs:
       - name: Install dependencies
         run: |
           if [ -f package.json ]; then
-            npm ci --prefer-offline 2>/dev/null || npm ci || npm install --prefer-offline
+            npm ci 2>/dev/null || npm install
           fi
       
       - name: Build Android
@@ -281,7 +274,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
       
       - name: Install dependencies
         run: |
@@ -325,10 +317,10 @@ jobs:
           echo ""
           echo "| Job | Status |"
           echo "|-----|--------|"
-          echo "| Lint | ${{ needs.lint.result }} |"
-          echo "| Tests | ${{ needs.test.result }} |"
-          echo "| Linux | ${{ needs.build-linux.result }} |"
-          echo "| Windows | ${{ needs.build-windows.result }} |"
-          echo "| macOS | ${{ needs.build-macos.result }} |"
-          echo "| Android | ${{ needs.build-android.result }} |"
-          echo "| iOS | ${{ needs.build-ios.result }} |"
+          echo "| Lint | \${{ needs.lint.result }} |"
+          echo "| Tests | \${{ needs.test.result }} |"
+          echo "| Linux | \${{ needs.build-linux.result }} |"
+          echo "| Windows | \${{ needs.build-windows.result }} |"
+          echo "| macOS | \${{ needs.build-macos.result }} |"
+          echo "| Android | \${{ needs.build-android.result }} |"
+          echo "| iOS | \${{ needs.build-ios.result }} |"
