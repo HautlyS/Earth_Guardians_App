@@ -147,19 +147,17 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
       
-      - name: Install dependencies
-        run: |
-          if [ -f package.json ]; then
-            npm ci 2>/dev/null || npm install 2>/dev/null || echo "npm install skipped"
-          fi
-      
       - name: Build Windows
         run: |
-          if [ -d "electron" ] || [ -f "electron-builder.yml" ] || [ -f "electron-builder.json" ] || [ -d "platforms/win32" ]; then
-            npm run build:win32 2>/dev/null || npm run build:windows 2>/dev/null || npm run build:electron:win 2>/dev/null || npm run build
-          else
-            echo "Windows/Electron not configured. Skipping Windows build."
-          fi
+          if (Test-Path electron) {
+            npm run build:win32
+          } elseif (Test-Path electron-builder.yml) {
+            npm run build:electron:win
+          } elseif (Test-Path platforms\win32) {
+            npm run build:windows
+          } else {
+            echo "Electron not configured. Skipping Windows build."
+          }
       
       - name: Upload Windows artifact
         if: success()
