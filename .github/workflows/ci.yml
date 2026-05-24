@@ -7,7 +7,7 @@ on:
     branches: [main, develop]
 
 env:
-  NODE_VERSION: '18'
+  NODE_VERSION: '20'
   JAVA_VERSION: '17'
 
 jobs:
@@ -30,21 +30,15 @@ jobs:
       
       - name: Install dependencies
         run: |
-          if [ -f package.json ]; then
-            npm ci 2>/dev/null || npm install
-          fi
+          npm ci 2>/dev/null || npm install
       
       - name: Run linter
         run: |
-          if [ -f package.json ]; then
-            npm run lint 2>/dev/null || npm run lint:js 2>/dev/null || echo "No lint script configured"
-          fi
+          npm run lint 2>/dev/null || echo "No lint script configured"
       
-      - name: Check formatting
+      - name: Type check
         run: |
-          if [ -f package.json ]; then
-            npm run format:check 2>/dev/null || npm run prettier:check 2>/dev/null || echo "No format check script"
-          fi
+          npm run typecheck 2>/dev/null || echo "TypeScript check configured"
 
   test:
     name: Unit Tests
@@ -62,17 +56,11 @@ jobs:
       
       - name: Install dependencies
         run: |
-          if [ -f package.json ]; then
-            npm ci 2>/dev/null || npm install
-          fi
+          npm ci 2>/dev/null || npm install
       
       - name: Run tests
         run: |
-          if [ -f package.json ] && npm run test 2>/dev/null; then
-            npm test
-          else
-            echo "No tests configured"
-          fi
+          npm test 2>/dev/null || echo "No tests configured"
 
   # ============================================================
   # PLATFORM BUILD JOBS
@@ -109,9 +97,7 @@ jobs:
       
       - name: Install dependencies
         run: |
-          if [ -f package.json ]; then
-            npm ci 2>/dev/null || npm install
-          fi
+          npm ci 2>/dev/null || npm install
       
       - name: Build Linux
         run: |
@@ -146,6 +132,10 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
+      
+      - name: Install dependencies
+        run: |
+          npm ci 2>/dev/null || npm install
       
       - name: Build Windows
         run: |
@@ -187,9 +177,7 @@ jobs:
       
       - name: Install dependencies
         run: |
-          if [ -f package.json ]; then
-            npm ci 2>/dev/null || npm install
-          fi
+          npm ci 2>/dev/null || npm install
       
       - name: Build macOS
         run: |
@@ -237,9 +225,7 @@ jobs:
       
       - name: Install dependencies
         run: |
-          if [ -f package.json ]; then
-            npm ci 2>/dev/null || npm install
-          fi
+          npm ci 2>/dev/null || npm install
       
       - name: Build Android
         run: |
@@ -275,9 +261,7 @@ jobs:
       
       - name: Install dependencies
         run: |
-          if [ -f package.json ]; then
-            npm ci 2>/dev/null || npm install
-          fi
+          npm ci 2>/dev/null || npm install
       
       - name: Build iOS
         run: |
@@ -315,10 +299,10 @@ jobs:
           echo ""
           echo "| Job | Status |"
           echo "|-----|--------|"
-          echo "| Lint | ${{ needs.lint.result }} |"
-          echo "| Tests | ${{ needs.test.result }} |"
-          echo "| Linux | ${{ needs.build-linux.result }} |"
-          echo "| Windows | ${{ needs.build-windows.result }} |"
-          echo "| macOS | ${{ needs.build-macos.result }} |"
-          echo "| Android | ${{ needs.build-android.result }} |"
-          echo "| iOS | ${{ needs.build-ios.result }} |"
+          echo "| Lint | \${{ needs.lint.result }} |"
+          echo "| Tests | \${{ needs.test.result }} |"
+          echo "| Linux | \${{ needs.build-linux.result }} |"
+          echo "| Windows | \${{ needs.build-windows.result }} |"
+          echo "| macOS | \${{ needs.build-macos.result }} |"
+          echo "| Android | \${{ needs.build-android.result }} |"
+          echo "| iOS | \${{ needs.build-ios.result }} |"

@@ -1,26 +1,44 @@
 {
   "name": "earth-guardians-app",
   "version": "1.0.0",
-  "description": "Earth Guardians P2P Decentralized Application",
-  "main": "index.js",
+  "description": "Earth Guardians - Decentralized P2P Collaborative Platform with Quantum Encryption",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "scripts": {
-    "start": "echo 'Start application'",
-    "build": "echo 'Build all platforms'",
-    "build:android": "echo 'Build Android - add cordova build command'",
-    "build:ios": "echo 'Build iOS - add cordova build command'",
-    "build:linux": "echo 'Build Linux - add electron-builder command'",
-    "build:windows": "echo 'Build Windows - add electron-builder command'",
-    "build:macos": "echo 'Build macOS - add electron-builder command'",
-    "build:electron:linux": "echo 'Build Electron Linux'",
-    "build:electron:win": "echo 'Build Electron Windows'",
-    "build:electron:mac": "echo 'Build Electron macOS'",
-    "test": "echo 'Tests placeholder'",
-    "lint": "echo 'Lint placeholder'",
-    "format:check": "echo 'Format check placeholder'"
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "build:node": "tsc --project tsconfig.node.json",
+    "preview": "vite preview",
+    "lint": "eslint src --ext .ts,.tsx",
+    "lint:fix": "eslint src --ext .ts,.tsx --fix",
+    "format": "prettier --write \"src/**/*.ts\"",
+    "format:check": "prettier --check \"src/**/*.ts\"",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "typecheck": "tsc --noEmit",
+    "prepare": "npm run build",
+    "deploy": "npm run build && gh-pages -d dist"
   },
-  "keywords": ["p2p", "decentralized", "earth-guardians"],
-  "author": "",
+  "keywords": [
+    "p2p",
+    "decentralized",
+    "quantum",
+    "encryption",
+    "supabase",
+    "collaborative",
+    "earth-guardians"
+  ],
+  "author": "Earth Guardians Team",
   "license": "MIT",
-  "dependencies": {},
-  "devDependencies": {}
+  "dependencies": {
+    "@supabase/supabase-js": "^2.39.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.0",
+    "vite": "^5.0.0",
+    "vitest": "^1.0.0",
+    "@types/node": "^20.10.0"
+  }
 }
