@@ -233,6 +233,13 @@ jobs:
       - name: Install dependencies
         run: pnpm install --no-frozen-lockfile || echo "Install completed with warnings"
 
+      - name: Build Web App for Tauri
+        run: |
+          pnpm exec vite build --config apps/web/vite.config.ts
+        working-directory: apps/web
+        env:
+          NODE_PATH: ""
+
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@master
         with:

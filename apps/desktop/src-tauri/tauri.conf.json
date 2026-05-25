@@ -1,7 +1,7 @@
 {
   "build": {
     "beforeDevCommand": "",
-    "beforeBuildCommand": "pnpm install --no-frozen-lockfile && pnpm exec vite build",
+    "beforeBuildCommand": "",
     "devPath": "../web",
     "distDir": "../web/dist"
   },
