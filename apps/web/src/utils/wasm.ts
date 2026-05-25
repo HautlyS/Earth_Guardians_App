@@ -1,21 +1,22 @@
 /**
- * WASM Module Loader
- * Handles lazy loading and initialization of Rust WASM modules
+ * WASM Module Loader - Legacy wrapper
+ * 
+ * This module provides a compatibility layer for code that imports from this file.
+ * WASM classes (Compressor, Hasher, P2PUtils) should be imported directly from
+ * '@shared/earth_guardians_shared' and initialized with the default export.
+ * 
+ * @deprecated Use direct imports from @shared/earth_guardians_shared instead
  */
+
+import init, { Compressor, Hasher, P2PUtils } from '@shared/earth_guardians_shared'
 
 let wasmInitialized = false
 let wasmModule: any = null
 
 export interface WasmExports {
-  Compressor: {
-    new (): CompressorInstance
-  }
-  Hasher: {
-    new (): HasherInstance
-  }
-  P2PUtils: {
-    new (): P2PUtilsInstance
-  }
+  Compressor: typeof Compressor
+  Hasher: typeof Hasher
+  P2PUtils: typeof P2PUtils
 }
 
 export interface CompressorInstance {
@@ -40,10 +41,8 @@ export async function initializeWasm(): Promise<void> {
   if (wasmInitialized) return
 
   try {
-    // Dynamic import of WASM module with correct file extension
-    const wasm = await import('@shared/earth_guardians_shared')
-    await wasm.default()
-    wasmModule = wasm
+    await init()
+    wasmModule = { Compressor, Hasher, P2PUtils }
     wasmInitialized = true
     console.log('[WASM] Initialized successfully')
   } catch (error) {

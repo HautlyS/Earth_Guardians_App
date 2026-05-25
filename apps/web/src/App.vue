@@ -125,9 +125,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
-import { p2pManager } from '@utils/p2p-manager'
-import { initializeWasm, testCompressor, testHasher } from '@shared/earth_guardians_shared'
+import { ref, onMounted } from 'vue'
+import { p2pManager, type P2PStats } from '@utils/p2p-manager'
+import init, { Compressor, Hasher, P2PUtils } from '@shared/earth_guardians_shared'
 
 // App info
 const version = ref(__APP_VERSION__ || '1.0.0')
@@ -155,7 +155,6 @@ const realtimeEnabled = ref(false)
 const buildTime = ref(0)
 const memoryUsage = ref(0)
 
-// Computed
 const startTime = Date.now()
 
 onMounted(async () => {
@@ -166,7 +165,7 @@ onMounted(async () => {
   
   // Initialize WASM
   try {
-    await initializeWasm()
+    await init()
     wasmReady.value = true
     compressorStatus.value = 'loaded'
     hasherStatus.value = 'loaded'
@@ -209,12 +208,17 @@ async function runWasmTest() {
   try {
     compressorStatus.value = 'testing'
     const testData = new Uint8Array(1024).fill(65)
-    const compressed = testCompressor(testData)
-    compressionRatio.value = Math.round((1 - compressed.length / testData.length) * 100)
+    
+    // Use WASM Compressor
+    const compressor = new Compressor()
+    const compressed = compressor.compress(testData)
+    compressionRatio.value = Math.round((1 - Number(compressed.length) / testData.length) * 100)
     compressorStatus.value = 'ready'
     
     hasherStatus.value = 'testing'
-    testHasher(testData)
+    const hasher = new Hasher()
+    hasher.update(testData)
+    hasher.finish()
     hasherStatus.value = 'ready'
   } catch (e) {
     console.error('WASM test failed:', e)
