@@ -188,7 +188,7 @@ jobs:
   build-desktop:
     name: Build Desktop (${{ matrix.platform }})
     runs-on: ${{ matrix.os }}
-    needs: build-web
+    needs: [build-wasm, build-web]
     continue-on-error: ${{ matrix.platform == 'windows' }}
     strategy:
       fail-fast: false
@@ -232,6 +232,13 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --no-frozen-lockfile || echo "Install completed with warnings"
+
+      - name: Download WASM artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: wasm-artifacts
+          path: packages/shared/pkg
+        continue-on-error: true
 
       - name: Build Web App for Tauri
         run: |
