@@ -291,10 +291,12 @@ jobs:
         run: |
           echo "=== Build artifacts ==="
           if [ -n "${{ matrix.target }}" ]; then
-            find apps/desktop/src-tauri/target/${{ matrix.target }}/release -type f \( -name "*.exe" -o -name "*.msi" -o -name "*.dmg" -o -name "*.app" -o -name "*.deb" -o -name "*.rpm" -o -name "*.AppImage" \) 2>/dev/null | head -30 || echo "No artifacts found"
+            find apps/desktop/src-tauri/target/${{ matrix.target }}/release -type f \( -name "earth-guardians-desktop*" -o -name "*.exe" -o -name "*.msi" -o -name "*.dmg" -o -name "*.app" -o -name "*.deb" -o -name "*.rpm" -o -name "*.AppImage" -o -name "*.so" -o -name "*.dylib" \) 2>/dev/null | head -30 || echo "No artifacts found"
           else
-            find apps/desktop/src-tauri/target/release -type f \( -name "*.exe" -o -name "*.msi" -o -name "*.dmg" -o -name "*.app" -o -name "*.deb" -o -name "*.rpm" -o -name "*.AppImage" \) 2>/dev/null | head -30 || echo "No artifacts found"
+            find apps/desktop/src-tauri/target/release -type f \( -name "earth-guardians-desktop*" -o -name "*.exe" -o -name "*.msi" -o -name "*.dmg" -o -name "*.app" -o -name "*.deb" -o -name "*.rpm" -o -name "*.AppImage" -o -name "*.so" -o -name "*.dylib" \) 2>/dev/null | head -30 || echo "No artifacts found"
           fi
+          echo "=== Listing ${{ matrix.artifact_dir }} ==="
+          ls -la ${{ matrix.artifact_dir }}/ 2>/dev/null | head -20 || echo "Directory not found"
 
       - name: Upload Desktop artifacts
         if: matrix.platform != 'ios'
@@ -303,12 +305,12 @@ jobs:
           name: ${{ matrix.artifact_name }}
           path: |
             ${{ matrix.artifact_dir }}/bundle/**
+            ${{ matrix.artifact_dir }}/earth-guardians-desktop
+            ${{ matrix.artifact_dir }}/earth-guardians-desktop.exe
             ${{ matrix.artifact_dir }}/*.exe
             ${{ matrix.artifact_dir }}/*.msi
-            ${{ matrix.artifact_dir }}/Earth*.exe
-            ${{ matrix.artifact_dir }}/earth*.exe
           retention-days: 7
-          if-no-files-found: ignore
+          if-no-files-found: warn
 
       - name: Upload iOS artifacts
         if: matrix.platform == 'ios'
