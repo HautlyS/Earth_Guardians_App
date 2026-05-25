@@ -195,9 +195,15 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: web-dist
-          path: |
-            apps/web/dist
-            packages/shared/pkg
+          path: apps/web/dist
+          retention-days: 7
+          if-no-files-found: ignore
+
+      - name: Upload WASM artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: wasm-artifacts
+          path: packages/shared/pkg
           retention-days: 7
           if-no-files-found: ignore
 
@@ -253,7 +259,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: web-dist
-          path: .
+          path: apps/web
         continue-on-error: true
 
       - name: Setup Rust toolchain
