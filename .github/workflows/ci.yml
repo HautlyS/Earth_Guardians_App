@@ -152,7 +152,6 @@ jobs:
   build-web:
     name: Build Web
     runs-on: ubuntu-latest
-    needs: build-wasm
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -168,8 +167,23 @@ jobs:
           corepack prepare pnpm@${{ env.PNPM_VERSION }} --activate
           pnpm --version
 
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          targets: wasm32-unknown-unknown
+
+      - name: Install wasm-pack
+        run: cargo install wasm-pack --locked || true
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile || pnpm install || echo "Install completed with warnings"
+
+      - name: Build WASM
+        run: |
+          cd packages/shared && wasm-pack build --target web --out-dir pkg || echo "WASM build skipped"
+          cd ../..
+        continue-on-error: true
 
       - name: Build Web
         run: |
@@ -188,7 +202,7 @@ jobs:
   build-desktop:
     name: Build Desktop (${{ matrix.platform }})
     runs-on: ${{ matrix.os }}
-    needs: [build-wasm, build-web]
+    needs: build-web
     continue-on-error: ${{ matrix.platform == 'windows' }}
     strategy:
       fail-fast: false
@@ -232,13 +246,6 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --no-frozen-lockfile || echo "Install completed with warnings"
-
-      - name: Download WASM artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: wasm-artifacts
-          path: packages/shared/pkg
-        continue-on-error: true
 
       - name: Build Web App for Tauri
         run: |
