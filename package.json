@@ -4,10 +4,6 @@
   "description": "Earth Guardians NGO - Neo-brutalist collaborative platform with P2P, WASM, and decentralized storage",
   "private": true,
   "type": "module",
-  "workspaces": [
-    "apps/*",
-    "packages/*"
-  ],
   "scripts": {
     "dev": "pnpm -r dev",
     "dev:web": "pnpm --filter @earth-guardians/web dev",
