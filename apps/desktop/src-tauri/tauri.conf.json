@@ -3,8 +3,7 @@
     "beforeDevCommand": "",
     "beforeBuildCommand": "",
     "devPath": "../src",
-    "distDir": "../dist",
-    "devtools": true
+    "distDir": "../dist"
   },
   "package": {
     "productName": "Earth Guardians",

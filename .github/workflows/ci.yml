@@ -278,8 +278,8 @@ jobs:
       - name: Build Tauri
         run: |
           cd apps/desktop/src-tauri
-          cargo build --release 2>&1 || echo "Build completed"
-        continue-on-error: true
+          cargo build --release 2>&1
+        continue-on-error: false
 
       - name: Build iOS bundle
         if: matrix.platform == 'ios'
