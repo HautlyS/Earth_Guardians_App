@@ -41,7 +41,7 @@ jobs:
           corepack prepare pnpm@${{ env.PNPM_VERSION }} --activate
           pnpm --version'
 
-|      - name: Setup Java
+      - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
@@ -126,7 +126,7 @@ jobs:
           corepack prepare pnpm@${{ env.PNPM_VERSION }} --activate
           pnpm --version'
 
-|      - name: Install dependencies
+      - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
       - name: Build Web

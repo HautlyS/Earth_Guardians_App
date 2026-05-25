@@ -85,7 +85,7 @@ jobs:
       - name: Setup Rust cache
         uses: Swatinem/rust-cache@v2
 
-|      - name: Install dependencies
+      - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
       - name: Build WASM (if not exists)
