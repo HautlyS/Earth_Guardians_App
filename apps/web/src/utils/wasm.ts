@@ -41,7 +41,7 @@ export async function initializeWasm(): Promise<void> {
 
   try {
     // Dynamic import of WASM module with correct file extension
-    const wasm = await import('@shared/wasm.js')
+    const wasm = await import('@shared/earth_guardians_shared')
     await wasm.default()
     wasmModule = wasm
     wasmInitialized = true
