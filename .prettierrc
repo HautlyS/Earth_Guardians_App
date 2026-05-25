@@ -1,0 +1,17 @@
+# Earth Guardians - Prettier Configuration
+
+{
+  "semi": true,
+  "singleQuote": true,
+  "tabWidth": 2,
+  "trailingComma": "es5",
+  "printWidth": 100,
+  "arrowParens": "always",
+  "endOfLine": "lf",
+  "vueIndentScriptAndStyle": false,
+  "bracketSameLine": false,
+  "jsxSingleQuote": false,
+  "jsxBracketSameLine": false,
+  "quoteProps": "as-needed",
+  "vueFiles": true
+}

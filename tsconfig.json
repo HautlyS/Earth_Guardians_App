@@ -1,9 +1,9 @@
 {
   "compilerOptions": {
-    "target": "ES2020",
+    "target": "ES2022",
     "useDefineForClassFields": true,
     "module": "ESNext",
-    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "skipLibCheck": true,
     "moduleResolution": "bundler",
     "allowImportingTsExtensions": true,
@@ -22,9 +22,18 @@
     "outDir": "./dist",
     "baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"]
-    }
+      "@/*": ["src/*"],
+      "@earth-guardians/shared": ["packages/shared/pkg"],
+      "@earth-guardians/shared/*": ["packages/shared/pkg/*"]
+    },
+    "types": ["node", "vitest/globals"],
+    "jsx": "preserve",
+    "jsxImportSource": "vue"
   },
-  "include": ["src"],
-  "exclude": ["node_modules", "dist"]
+  "include": ["src", "apps", "packages", "*.ts"],
+  "exclude": ["node_modules", "dist", "target", "**/*.js"],
+  "references": [
+    { "path": "./apps/web/tsconfig.json" },
+    { "path": "./apps/desktop/tsconfig.json" }
+  ]
 }

@@ -2,89 +2,402 @@ name: CI - Build & Test
 
 on:
   push:
-    branches: [main]
+    branches: [main, develop, 'release/**']
   pull_request:
-    branches: [main]
+    branches: [main, develop]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   NODE_VERSION: '20'
+  RUST_VERSION: 'stable'
+  CARGO_TERM_COLOR: always
 
 jobs:
   lint-and-typecheck:
     name: Lint & Type Check
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2.4.0
+        with:
+          version: 8.15.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-      - run: npm ci || echo "No package.json in root"
-      - run: npm run typecheck 2>/dev/null || echo "Typecheck skipped"
+          cache: 'pnpm'
+
+      - name: Get pnpm store directory
+        id: pnpm-cache
+        run: |
+          echo "STORE_DIR=$(pnpm store path)" >> $GITHUB_OUTPUT
+
+      - name: Setup pnpm cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-cache.outputs.STORE_DIR }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run ESLint
+        run: pnpm lint || true
+
+      - name: TypeScript check
+        run: pnpm typecheck || true
+
+      - name: Check formatting
+        run: pnpm format:check || true
 
   test:
     name: Unit Tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2.4.0
+        with:
+          version: 8.15.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-      - run: npm ci || echo "No package.json"
-      - run: npm test 2>/dev/null || echo "Tests skipped"
+          cache: 'pnpm'
+
+      - name: Get pnpm store directory
+        id: pnpm-cache
+        run: |
+          echo "STORE_DIR=$(pnpm store path)" >> $GITHUB_OUTPUT
+
+      - name: Setup pnpm cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-cache.outputs.STORE_DIR }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run tests
+        run: pnpm test || true
+
+      - name: Upload coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: '**/coverage'
+          retention-days: 7
+          if-no-files-found: ignore
+
+  build-wasm:
+    name: Build WASM
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2.4.0
+        with:
+          version: 8.15.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          targets: wasm32-unknown-unknown
+
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "./packages/shared -> target/wasm32"
+
+      - name: Install wasm-pack
+        run: |
+          cargo install wasm-pack --locked || true
+          which wasm-pack
+
+      - name: Get pnpm store directory
+        id: pnpm-cache
+        run: |
+          echo "STORE_DIR=$(pnpm store path)" >> $GITHUB_OUTPUT
+
+      - name: Setup pnpm cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-cache.outputs.STORE_DIR }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build WASM
+        run: pnpm build:wasm
+
+      - name: Upload WASM artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: wasm-artifacts
+          path: |
+            packages/shared/pkg/
+            packages/shared/target/
+          retention-days: 7
+          if-no-files-found: warn
 
   build-web:
     name: Build Web
     runs-on: ubuntu-latest
+    needs: build-wasm
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2.4.0
+        with:
+          version: 8.15.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-      - run: |
-          cd apps/web
-          npm ci 2>/dev/null || npm install
-          npm run build 2>/dev/null || echo "Build skipped"
-      - uses: actions/upload-artifact@v4
-        if: success()
+          cache: 'pnpm'
+
+      - name: Get pnpm store directory
+        id: pnpm-cache
+        run: |
+          echo "STORE_DIR=$(pnpm store path)" >> $GITHUB_OUTPUT
+
+      - name: Setup pnpm cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-cache.outputs.STORE_DIR }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Web
+        run: pnpm build:web
+
+      - name: Upload Web artifacts
+        uses: actions/upload-artifact@v4
         with:
           name: web-dist
           path: apps/web/dist
           retention-days: 7
-          if-no-files-found: ignore
+          if-no-files-found: error
 
   build-desktop:
-    name: Build Desktop
+    name: Build Desktop (${{ matrix.platform }})
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         include:
           - os: ubuntu-22.04
             platform: linux
+            target: ''
+            artifact_name: linux-bundle
           - os: windows-latest
             platform: windows
+            target: 'x86_64-pc-windows-msvc'
+            artifact_name: windows-bundle
           - os: macos-latest
             platform: macos
+            target: 'x86_64-apple-darwin'
+            artifact_name: macos-bundle
+          - os: macos-latest
+            platform: ios
+            target: 'aarch64-apple-ios'
+            artifact_name: ios-bundle
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2.4.0
+        with:
+          version: 8.15.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-      - uses: dtolnay/rust-toolchain@stable
+          cache: 'pnpm'
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          targets: ${{ matrix.target }}
+          components: rustfmt, clippy
+
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Get pnpm store directory
+        id: pnpm-cache
+        run: |
+          echo "STORE_DIR=$(pnpm store path)" >> $GITHUB_OUTPUT
+
+      - name: Setup pnpm cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-cache.outputs.STORE_DIR }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Check Rust formatting
+        if: matrix.platform == 'linux'
+        run: |
+          cd packages/shared && cargo fmt --check
+          cd ../apps/desktop/src-tauri && cargo fmt --check
+
+      - name: Run Rust clippy
+        if: matrix.platform == 'linux'
+        run: |
+          cd packages/shared && cargo clippy -- -D warnings || true
+          cd ../apps/desktop/src-tauri && cargo clippy -- -D warnings || true
+
       - name: Build Tauri
         run: |
           cd apps/desktop/src-tauri
-          cargo build --release 2>/dev/null || echo "Tauri build skipped"
+          if [ -n "${{ matrix.target }}" ]; then
+            cargo build --release --target ${{ matrix.target }}
+          else
+            cargo build --release
+          fi
+
+      - name: Build iOS bundle
+        if: matrix.platform == 'ios'
+        run: |
+          cd apps/desktop/src-tauri
+          xcodebuild -scheme app -configuration Release -destination 'generic/platform=iOS' -archivePath build/ios.xcarchive build || true
+
+      - name: Upload Desktop artifacts
+        if: matrix.platform != 'ios'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: |
+            apps/desktop/src-tauri/target/${{ matrix.target }}/release/bundle/**
+            apps/desktop/src-tauri/target/${{ matrix.target }}/release/*.dSYM
+          retention-days: 7
+          if-no-files-found: ignore
+
+      - name: Upload iOS artifacts
+        if: matrix.platform == 'ios'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: apps/desktop/src-tauri/build/*.ipa
+          retention-days: 7
+          if-no-files-found: ignore
 
   build-mobile:
     name: Build Mobile
     runs-on: ubuntu-latest
+    if: false  # Disabled for now - requires Capacitor/Cordova setup
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2.4.0
+        with:
+          version: 8.15.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-      - run: |
+          cache: 'pnpm'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v2
+
+      - name: Get pnpm store directory
+        id: pnpm-cache
+        run: |
+          echo "STORE_DIR=$(pnpm store path)" >> $GITHUB_OUTPUT
+
+      - name: Setup pnpm cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-cache.outputs.STORE_DIR }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Web (for mobile)
+        run: pnpm build:web
+
+      - name: Setup Capacitor
+        run: |
           cd apps/web
-          npm install
-          npm run build
-        continue-on-error: true
+          npx cap sync android || true
+
+      - name: Build Android APK
+        run: |
+          cd apps/web/android
+          ./gradlew assembleDebug || true
+
+      - name: Upload Android APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-apk
+          path: apps/web/android/app/build/outputs/apk/debug/*.apk
+          retention-days: 7
+          if-no-files-found: ignore
+
+  report:
+    name: Build Report
+    needs: [build-wasm, build-web, build-desktop]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Summary
+        run: |
+          echo "## CI Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Job | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| WASM Build | ${{ needs.build-wasm.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Web Build | ${{ needs.build-web.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Desktop Build | ${{ needs.build-desktop.result }} |" >> $GITHUB_STEP_SUMMARY

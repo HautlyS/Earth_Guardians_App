@@ -1,0 +1,78 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "globalDependencies": ["**/.env.*local"],
+  "globalEnv": ["NODE_ENV", "CI"],
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build", "build:wasm"],
+      "inputs": ["$TURBO_DEFAULT$", "!**/node_modules/**"],
+      "outputs": ["dist/**", ".next/**", "!.next/cache/**", "pkg/**"],
+      "cache": true
+    },
+    "build:wasm": {
+      "cache": true,
+      "outputs": ["pkg/**", "target/**"]
+    },
+    "build:web": {
+      "dependsOn": ["^build", "^build:wasm"],
+      "cache": true,
+      "outputs": ["apps/web/dist/**"]
+    },
+    "build:desktop": {
+      "dependsOn": ["^build", "^build:wasm"],
+      "cache": true,
+      "outputs": ["apps/desktop/src-tauri/target/release/**"]
+    },
+    "dev": {
+      "cache": false,
+      "persistent": true
+    },
+    "dev:web": {
+      "dependsOn": ["^build:wasm"],
+      "cache": false,
+      "persistent": true
+    },
+    "dev:desktop": {
+      "dependsOn": ["^build", "^build:wasm"],
+      "cache": false,
+      "persistent": true
+    },
+    "lint": {
+      "dependsOn": ["^build"],
+      "cache": true
+    },
+    "lint:fix": {
+      "dependsOn": ["^build"],
+      "cache": true
+    },
+    "format": {
+      "dependsOn": ["^build"],
+      "cache": true
+    },
+    "format:check": {
+      "dependsOn": ["^build"],
+      "cache": true
+    },
+    "typecheck": {
+      "dependsOn": ["^build"],
+      "cache": true
+    },
+    "test": {
+      "dependsOn": ["^build"],
+      "cache": true,
+      "outputs": ["coverage/**", "test-results/**"]
+    },
+    "test:watch": {
+      "cache": false,
+      "persistent": true
+    },
+    "test:coverage": {
+      "dependsOn": ["^build"],
+      "cache": true,
+      "outputs": ["coverage/**"]
+    },
+    "clean": {
+      "cache": false
+    }
+  }
+}

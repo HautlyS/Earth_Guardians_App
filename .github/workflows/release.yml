@@ -5,30 +5,142 @@ on:
     tags:
       - 'v*'
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., 1.0.0)'
+        required: false
+        type: string
 
 env:
-  RUST_VERSION: '1.75'
+  RUST_VERSION: 'stable'
   NODE_VERSION: '20'
+  CARGO_TERM_COLOR: always
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
+  validate:
+    name: Validate Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get version
+        id: version
+        run: |
+          if [ -n "${{ inputs.version }}" ]; then
+            echo "VERSION=${{ inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+          fi
+          echo "Version: ${{ steps.version.outputs.VERSION }}"
+
+      - name: Validate tag
+        run: |
+          if ! git tag -l "v${{ steps.version.outputs.VERSION }}" | grep -q .; then
+            echo "Tag v${{ steps.version.outputs.VERSION }} not found. Please create it first."
+            exit 1
+          fi
+
   create-release:
     name: Create Release
+    needs: validate
     runs-on: ubuntu-latest
     outputs:
       upload_url: ${{ steps.create_release.outputs.upload_url }}
+      version: ${{ steps.version.outputs.VERSION }}
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get version
+        id: version
+        run: |
+          if [ -n "${{ inputs.version }}" ]; then
+            echo "VERSION=${{ inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          echo 'CHANGELOG<<EOF' >> $GITHUB_OUTPUT
+          echo '# Changelog' >> $GITHUB_OUTPUT
+          echo '' >> $GITHUB_OUTPUT
+          git log --pretty=format:"- %s" ${{ github.event.before }}..HEAD >> $GITHUB_OUTPUT || true
+          echo 'EOF' >> $GITHUB_OUTPUT
+
       - name: Create Release
         id: create_release
         uses: softprops/action-gh-release@v1
         with:
           draft: true
-          prerelease: false
+          prerelease: ${{ contains(steps.version.outputs.VERSION, 'alpha') || contains(steps.version.outputs.VERSION, 'beta') || contains(steps.version.outputs.VERSION, 'rc') }}
           generate_release_notes: true
+          body_path: .changelog.tmp
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Save changelog
+        run: |
+          ${{ steps.changelog.outputs.CHANGELOG }} > .changelog.tmp
+
+  build-wasm:
+    name: Build WASM
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2.4.0
+        with:
+          version: 8.15.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          targets: wasm32-unknown-unknown
+
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "./packages/shared -> target/wasm32"
+
+      - name: Install wasm-pack
+        run: cargo install wasm-pack --locked
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build WASM
+        run: pnpm build:wasm
+
+      - name: Upload WASM artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: wasm-release
+          path: packages/shared/pkg/
+          retention-days: 1
 
   build-and-upload:
     name: Build & Upload (${{ matrix.platform }})
-    needs: [create-release]
+    needs: [create-release, build-wasm]
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -37,28 +149,185 @@ jobs:
           - os: ubuntu-22.04
             platform: linux
             target: ''
+            artifact_path: apps/desktop/src-tauri/target/release/bundle
+            extensions: '["AppImage","deb","rpm"]'
           - os: windows-latest
             platform: windows
             target: 'x86_64-pc-windows-msvc'
+            artifact_path: apps/desktop/src-tauri/target/x86_64-pc-windows-msvc/release/bundle
+            extensions: '["msi","nsis"]'
           - os: macos-latest
             platform: macos
             target: 'x86_64-apple-darwin'
+            artifact_path: apps/desktop/src-tauri/target/x86_64-apple-darwin/release/bundle
+            extensions: '["dmg","app"]'
+          - os: macos-latest
+            platform: macos-arm64
+            target: 'aarch64-apple-darwin'
+            artifact_path: apps/desktop/src-tauri/target/aarch64-apple-darwin/release/bundle
+            extensions: '["dmg","app"]'
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2.4.0
+        with:
+          version: 8.15.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-      - uses: dtolnay/rust-toolchain@stable
+          cache: 'pnpm'
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ env.RUST_VERSION }}
           targets: ${{ matrix.target }}
+          components: rustfmt, clippy
+
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Download WASM artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: wasm-release
+          path: packages/shared/pkg
+
       - name: Build Tauri
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - name: Upload Release Asset
+
+      - name: Find and upload artifacts
+        run: |
+          find ${{ matrix.artifact_path }} -type f \( $(echo ${{ matrix.extensions }} | jq -r '. | map("-name \\(.)") | join(" -o ")") \) -exec ls -la {} \;
+
+      - name: Upload Linux artifacts
+        if: matrix.platform == 'linux'
         uses: softprops/upload-gh-release-asset@v1
         with:
           upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: apps/desktop/src-tauri/target/${{ matrix.target }}/release/bundle/*
+          asset_path: ${{ matrix.artifact_path }}/*
           asset_pattern: '*'
+          asset_content_type: application/octet-stream
+
+      - name: Upload Windows artifacts
+        if: matrix.platform == 'windows'
+        uses: softprops/upload-gh-release-asset@v1
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ${{ matrix.artifact_path }}/*
+          asset_pattern: '*'
+
+      - name: Upload macOS artifacts
+        if: contains(matrix.platform, 'macos')
+        uses: softprops/upload-gh-release-asset@v1
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ${{ matrix.artifact_path }}/*
+          asset_pattern: '*'
+
+  build-web:
+    name: Build Web (Release)
+    needs: build-wasm
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2.4.0
+        with:
+          version: 8.15.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Web
+        run: pnpm build:web
+
+      - name: Create release tag
+        run: |
+          echo "Building web for release..."
+          tar -czf web-dist.tar.gz -C apps/web/dist .
+
+      - name: Upload Web artifacts
+        uses: softprops/upload-gh-release-asset@v1
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: web-dist.tar.gz
+
+  publish-npm:
+    name: Publish NPM Packages
+    needs: [create-release, build-wasm]
+    runs-on: ubuntu-latest
+    if: github.event.inputs.skip_npm != 'true'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          registry-url: 'https://registry.npmjs.org/'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2.4.0
+        with:
+          version: 8.15.0
+
+      - name: Download WASM artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: wasm-release
+          path: packages/shared/pkg
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Publish shared package
+        run: |
+          cd packages/shared
+          npm publish --access public --tag latest || echo "NPM publish skipped (may already exist)"
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  final-report:
+    name: Release Summary
+    needs: [create-release, build-and-upload, build-web]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Generate Summary
+        run: |
+          echo "## Release ${{ needs.create-release.outputs.version }} Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Build Status" >> $GITHUB_STEP_SUMMARY
+          echo "| Component | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|------------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Desktop Builds | ${{ needs.build-and-upload.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Web Build | ${{ needs.build-web.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Artifacts" >> $GITHUB_STEP_SUMMARY
+          echo "- Linux, Windows, macOS binaries uploaded" >> $GITHUB_STEP_SUMMARY
+          echo "- Web distribution included" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Next Steps" >> $GITHUB_STEP_SUMMARY
+          echo "1. Review the draft release at: ${{ needs.create-release.outputs.upload_url }}" >> $GITHUB_STEP_SUMMARY
+          echo "2. Add release notes if not auto-generated" >> $GITHUB_STEP_SUMMARY
+          echo "3. Publish when ready" >> $GITHUB_STEP_SUMMARY

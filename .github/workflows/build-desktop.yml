@@ -13,10 +13,17 @@ on:
           - linux
           - windows
           - macos
+          - macos-arm64
+          - ios
 
 env:
-  RUST_VERSION: '1.75'
+  RUST_VERSION: 'stable'
   NODE_VERSION: '20'
+  CARGO_TERM_COLOR: always
+
+concurrency:
+  group: build-desktop-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build-tauri:
@@ -29,32 +36,132 @@ jobs:
           - os: ubuntu-22.04
             platform: linux
             target: ''
+            artifact_name: linux-bundle
+            extensions: '["AppImage","deb","rpm","AppImage.gz","deb.gz"]'
           - os: windows-latest
             platform: windows
             target: 'x86_64-pc-windows-msvc'
+            artifact_name: windows-bundle
+            extensions: '["msi","nsis","exe"]'
           - os: macos-latest
             platform: macos
             target: 'x86_64-apple-darwin'
+            artifact_name: macos-bundle-x64
+            extensions: '["dmg","app"]'
+          - os: macos-latest
+            platform: macos-arm64
+            target: 'aarch64-apple-darwin'
+            artifact_name: macos-bundle-arm64
+            extensions: '["dmg","app"]'
           - os: macos-latest
             platform: ios
             target: 'aarch64-apple-ios'
+            artifact_name: ios-bundle
+            extensions: '["ipa","xcarchive"]'
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2.4.0
+        with:
+          version: 8.15.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-      - uses: dtolnay/rust-toolchain@stable
+          cache: 'pnpm'
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ env.RUST_VERSION }}
           targets: ${{ matrix.target }}
-      - uses: tauri-apps/tauri-action@v0
+          components: rustfmt, clippy
+
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Get pnpm store directory
+        id: pnpm-cache
+        run: |
+          echo "STORE_DIR=$(pnpm store path)" >> $GITHUB_OUTPUT
+
+      - name: Setup pnpm cache
+        uses: actions/cache@v4
         with:
-          args: --target ${{ matrix.target }}
-      - name: Upload artifacts
-        if: matrix.platform != 'ios'
+          path: ${{ steps.pnpm-cache.outputs.STORE_DIR }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build WASM (if not exists)
+        run: |
+          if [ ! -d "packages/shared/pkg" ]; then
+            pnpm build:wasm || echo "WASM build skipped"
+          fi
+
+      - name: Build Tauri
+        run: |
+          cd apps/desktop/src-tauri
+          if [ -n "${{ matrix.target }}" ]; then
+            cargo build --release --target ${{ matrix.target }}
+          else
+            cargo build --release
+          fi
+
+      - name: Build iOS bundle
+        if: matrix.platform == 'ios'
+        run: |
+          cd apps/desktop/src-tauri
+          xcodebuild -scheme app -configuration Release -destination 'generic/platform=iOS Simulator' -archivePath build/ios.xcarchive build CODE_SIGNING_ALLOWED=NO || true
+
+      - name: List build artifacts
+        run: |
+          echo "=== Build artifacts ==="
+          if [ -n "${{ matrix.target }}" ]; then
+            find apps/desktop/src-tauri/target/${{ matrix.target }}/release -name "*.app" -o -name "*.dmg" -o -name "*.exe" -o -name "*.msi" -o -name "*.deb" -o -name "*.rpm" -o -name "*.AppImage" 2>/dev/null | head -20
+          else
+            find apps/desktop/src-tauri/target/release -name "*.app" -o -name "*.dmg" -o -name "*.exe" -o -name "*.msi" -o -name "*.deb" -o -name "*.rpm" -o -name "*.AppImage" 2>/dev/null | head -20
+          fi
+
+      - name: Upload macOS/iOS artifacts
+        if: contains(matrix.platform, 'macos') || matrix.platform == 'ios'
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.platform }}-bundles
-          path: apps/desktop/src-tauri/target/${{ matrix.target }}/release/bundle/*
+          name: ${{ matrix.artifact_name }}
+          path: |
+            apps/desktop/src-tauri/target/${{ matrix.target }}/release/bundle/**
+            apps/desktop/src-tauri/target/${{ matrix.target }}/release/*.dSYM
+            apps/desktop/src-tauri/build/*.xcarchive
           retention-days: 7
+          if-no-files-found: ignore
+
+      - name: Upload Linux/Windows artifacts
+        if: matrix.platform == 'linux' || matrix.platform == 'windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: |
+            apps/desktop/src-tauri/target/${{ matrix.target }}/release/bundle/**
+            apps/desktop/src-tauri/target/${{ matrix.target }}/release/*.pdb
+          retention-days: 7
+          if-no-files-found: ignore
+
+  build-report:
+    name: Build Report
+    needs: build-tauri
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Summary
+        run: |
+          echo "## Desktop Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Platform: ${{ github.event.inputs.platform || 'all' }}" >> $GITHUB_STEP_SUMMARY
+          echo "Status: ${{ needs.build-tauri.result }}" >> $GITHUB_STEP_SUMMARY

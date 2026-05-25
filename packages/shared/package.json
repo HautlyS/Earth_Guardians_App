@@ -1,0 +1,46 @@
+{
+  "name": "@earth-guardians/shared",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Earth Guardians Shared Library - Rust WASM utilities for P2P, compression, and hashing",
+  "type": "module",
+  "main": "pkg/earth_guardians_shared.js",
+  "types": "pkg/earth_guardians_shared.d.ts",
+  "module": "pkg/earth_guardians_shared.js",
+  "scripts": {
+    "build": "cargo build --release",
+    "build:wasm": "wasm-pack build --target web --out-dir pkg --release",
+    "build:wasm:debug": "wasm-pack build --target web --out-dir pkg",
+    "build:wasm:node": "wasm-pack build --target nodejs --out-dir pkg-node --release",
+    "build:all": "pnpm build:wasm && pnpm build:wasm:node",
+    "test": "wasm-pack test --node",
+    "test:firefox": "wasm-pack test --firefox",
+    "test:chrome": "wasm-pack test --chrome",
+    "watch": "wasm-pack watch --target web --out-dir pkg",
+    "lint": "cargo fmt --check && cargo clippy -- -D warnings",
+    "format": "cargo fmt",
+    "doc": "cargo doc --no-deps --open",
+    "clean": "cargo clean && rm -rf pkg pkg-node"
+  },
+  "devDependencies": {
+    "wasm-pack": "^0.12.0",
+    "wasm-bindgen-cli": "^0.2.0"
+  },
+  "keywords": [
+    "wasm",
+    "webassembly",
+    "rust",
+    "p2p",
+    "compression",
+    "hashing"
+  ],
+  "files": [
+    "pkg/**/*",
+    "README.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/earth-guardians/platform.git",
+    "directory": "packages/shared"
+  }
+}

@@ -12,29 +12,99 @@
     "dev": "pnpm -r dev",
     "dev:web": "pnpm --filter @earth-guardians/web dev",
     "dev:desktop": "pnpm --filter @earth-guardians/desktop dev",
-    "build": "pnpm -r build",
+    "dev:wasm": "pnpm --filter @earth-guardians/shared build:wasm && pnpm --filter @earth-guardians/web dev",
+    "build": "pnpm build:wasm && pnpm -r build",
     "build:web": "pnpm --filter @earth-guardians/web build",
     "build:desktop": "pnpm --filter @earth-guardians/desktop build",
     "build:wasm": "pnpm --filter @earth-guardians/shared build:wasm",
+    "build:all": "pnpm build:wasm && pnpm build:web && pnpm build:desktop",
     "preview": "pnpm --filter @earth-guardians/web preview",
+    "preview:desktop": "pnpm --filter @earth-guardians/desktop dev",
     "lint": "pnpm -r lint",
+    "lint:fix": "pnpm -r lint:fix",
     "format": "pnpm -r format",
+    "format:check": "pnpm -r format:check",
     "test": "pnpm -r test",
-    "typecheck": "pnpm -r typecheck"
+    "test:watch": "pnpm -r test:watch",
+    "test:coverage": "pnpm -r test:coverage",
+    "typecheck": "pnpm -r typecheck",
+    "clean": "pnpm -r clean",
+    "clean:dist": "pnpm -r exec rm -rf dist .turbo",
+    "update": "pnpm update --interactive --latest",
+    "release": "pnpm build:all && pnpm release:publish",
+    "release:publish": "git tag -a v$(pnpm -w version) -m 'Release v$(pnpm -w version)' && git push --tags",
+    "docker:up": "docker-compose up -d",
+    "docker:down": "docker-compose down",
+    "docker:build": "docker-compose build",
+    "db:migrate": "pnpm supabase db push",
+    "db:reset": "pnpm supabase db reset",
+    "db:seed": "pnpm supabase db seed",
+    "supabase:start": "supabase start",
+    "supabase:stop": "supabase stop",
+    "analyze": "pnpm -r exec pnpm analyze",
+    "size:analyze": "pnpm build:web --mode analyze"
   },
-  "keywords": ["earth-guardians", "ngo", "p2p", "wasm", "neo-brutalist", "decentralized"],
-  "author": "Earth Guardians Team",
+  "keywords": [
+    "earth-guardians",
+    "ngo",
+    "p2p",
+    "wasm",
+    "webassembly",
+    "neo-brutalist",
+    "decentralized",
+    "collaborative",
+    "vue",
+    "rust",
+    "tauri"
+  ],
+  "author": "Earth Guardians Team <dev@earthguardians.org>",
   "license": "MIT",
-  "devDependencies": {
-    "@types/node": "^20.10.0",
-    "typescript": "^5.3.0",
-    "vite": "^5.0.0",
-    "vitest": "^1.0.0",
-    "eslint": "^8.56.0",
-    "prettier": "^3.1.0"
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/earth-guardians/platform.git"
+  },
+  "homepage": "https://earthguardians.org",
+  "bugs": {
+    "url": "https://github.com/earth-guardians/platform/issues",
+    "email": "dev@earthguardians.org"
   },
   "engines": {
     "node": ">=20.0.0",
     "pnpm": ">=8.0.0"
+  },
+  "packageManager": "pnpm@8.15.0",
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@typescript-eslint/eslint-plugin": "^6.15.0",
+    "@typescript-eslint/parser": "^6.15.0",
+    "eslint": "^8.56.0",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-import-resolver-typescript": "^3.6.1",
+    "eslint-plugin-import": "^2.29.1",
+    "eslint-plugin-prettier": "^5.1.2",
+    "eslint-plugin-vue": "^9.19.2",
+    "prettier": "^3.1.0",
+    "prettier-plugin-packagejson": "^2.4.9",
+    "turbo": "^1.11.0",
+    "typescript": "^5.3.0",
+    "vite": "^5.0.0",
+    "vitest": "^1.0.0",
+    "@vitest/coverage-v8": "^1.0.0",
+    "eslint-plugin-pnpm": "^0.1.1"
+  },
+  "pnpm": {
+    "overrides": {
+      "ws": "^8.16.0"
+    },
+    "peerDependencyRules": {
+      "allowedVersions": {
+        "vue": "^3.4.0"
+      }
+    },
+    "onlyBuiltDependencies": [
+      "@anthropic-ai/sdk",
+      "sharp",
+      "esbuild"
+    ]
   }
 }
