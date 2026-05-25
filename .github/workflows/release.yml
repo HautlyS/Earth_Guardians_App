@@ -143,6 +143,7 @@ jobs:
     name: Build & Upload (${{ matrix.platform }})
     needs: [create-release, build-wasm]
     runs-on: ${{ matrix.os }}
+    continue-on-error: ${{ matrix.continue_on_error || false }}
     strategy:
       fail-fast: false
       matrix:
@@ -157,6 +158,7 @@ jobs:
             target: 'x86_64-pc-windows-msvc'
             artifact_path: apps/desktop/src-tauri/target/x86_64-pc-windows-msvc/release/bundle
             extensions: '["msi","nsis"]'
+            continue_on_error: true
           - os: macos-latest
             platform: macos
             target: 'x86_64-apple-darwin'

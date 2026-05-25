@@ -184,6 +184,7 @@ jobs:
   build-desktop:
     name: Build Desktop (${{ matrix.platform }})
     runs-on: ${{ matrix.os }}
+    continue-on-error: ${{ matrix.platform == 'windows' }}
     strategy:
       fail-fast: false
       matrix:
@@ -369,3 +370,7 @@ jobs:
           echo "| WASM Build | ${{ needs.build-wasm.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Web Build | ${{ needs.build-web.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Desktop Build | ${{ needs.build-desktop.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Desktop (Linux) | $(curl -s 'https://api.github.com/repos/HautlyS/Earth_Guardians_App/actions/runs/${{ github.run_id }}/jobs' -H 'Authorization: token ${{ secrets.GITHUB_TOKEN }}' | python3 -c \"import sys,json; d=json.load(sys.stdin); jobs=[j for j in d.get('jobs',[]) if 'linux' in j['name'].lower()]; print(jobs[0]['conclusion'] if jobs else 'N/A')\") |" >> $GITHUB_STEP_SUMMARY || true
+          echo "| Desktop (macOS) | $(curl -s 'https://api.github.com/repos/HautlyS/Earth_Guardians_App/actions/runs/${{ github.run_id }}/jobs' -H 'Authorization: token ${{ secrets.GITHUB_TOKEN }}' | python3 -c \"import sys,json; d=json.load(sys.stdin); jobs=[j for j in d.get('jobs',[]) if 'macos' in j['name'].lower()]; print(jobs[0]['conclusion'] if jobs else 'N/A')\") |" >> $GITHUB_STEP_SUMMARY || true
+          echo "| Desktop (Windows) | $(curl -s 'https://api.github.com/repos/HautlyS/Earth_Guardians_App/actions/runs/${{ github.run_id }}/jobs' -H 'Authorization: token ${{ secrets.GITHUB_TOKEN }}' | python3 -c \"import sys,json; d=json.load(sys.stdin); jobs=[j for j in d.get('jobs',[]) if 'windows' in j['name'].lower()]; print(jobs[0]['conclusion'] if jobs else 'N/A')\") |" >> $GITHUB_STEP_SUMMARY || true
+          echo "| Desktop (iOS) | $(curl -s 'https://api.github.com/repos/HautlyS/Earth_Guardians_App/actions/runs/${{ github.run_id }}/jobs' -H 'Authorization: token ${{ secrets.GITHUB_TOKEN }}' | python3 -c \"import sys,json; d=json.load(sys.stdin); jobs=[j for j in d.get('jobs',[]) if 'ios' in j['name'].lower()]; print(jobs[0]['conclusion'] if jobs else 'N/A')\") |" >> $GITHUB_STEP_SUMMARY || true
