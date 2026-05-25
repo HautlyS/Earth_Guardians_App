@@ -195,7 +195,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: web-dist
-          path: apps/web/dist
+          path: |
+            apps/web/dist
+            packages/shared/pkg
           retention-days: 7
           if-no-files-found: ignore
 
@@ -247,11 +249,12 @@ jobs:
       - name: Install dependencies
         run: pnpm install --no-frozen-lockfile || echo "Install completed with warnings"
 
-      - name: Build Web App for Tauri
-        run: |
-          cd apps/web && pnpm exec vite build
-        env:
-          NODE_PATH: ""
+      - name: Download Web artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: web-dist
+          path: .
+        continue-on-error: true
 
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@master
