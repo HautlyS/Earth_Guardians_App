@@ -235,8 +235,8 @@ jobs:
 
       - name: Build Web App for Tauri
         run: |
+          pnpm install --no-frozen-lockfile
           cd apps/web
-          pnpm install --frozen-lockfile || pnpm install
           pnpm exec vite build
         env:
           NODE_PATH: ""
