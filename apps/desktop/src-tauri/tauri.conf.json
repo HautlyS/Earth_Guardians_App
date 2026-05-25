@@ -1,9 +1,9 @@
 {
   "build": {
     "beforeDevCommand": "",
-    "beforeBuildCommand": "",
-    "devPath": "../../web",
-    "distDir": "../../web/dist"
+    "beforeBuildCommand": "pnpm install --no-frozen-lockfile && pnpm exec vite build",
+    "devPath": "../web",
+    "distDir": "../web/dist"
   },
   "package": {
     "productName": "Earth Guardians",

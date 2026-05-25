@@ -23,8 +23,7 @@
     "clean": "cargo clean && rm -rf pkg pkg-node"
   },
   "devDependencies": {
-    "wasm-pack": "^0.12.0",
-    "wasm-bindgen-cli": "^0.2.0"
+    "wasm-pack": "^0.12.0"
   },
   "keywords": [
     "wasm",
