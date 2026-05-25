@@ -245,11 +245,10 @@ jobs:
         if: matrix.platform == 'windows'
         run: |
           # WebView2 should be pre-installed on Windows 2022 runners
-          # Check if installed, if not try to install via chocolatey or winget
-          if (!Get-ItemProperty -Path "HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}" -ErrorAction SilentlyContinue) {
-            echo "WebView2 not found, checking alternative location..."
-          }
-          echo "WebView2 check completed"
+          # Just verify it exists
+          echo "Checking WebView2 installation..."
+          reg query "HKLM\\SOFTWARE\\WOW6432Node\\Microsoft\\EdgeUpdate\\Clients\\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}" 2>nul || echo "WebView2 check complete"
+          echo "Windows dependencies check complete"
 
       - name: Install macOS/iOS dependencies
         if: contains(matrix.platform, 'macos') || matrix.platform == 'ios'

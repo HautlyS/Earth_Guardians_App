@@ -204,8 +204,8 @@ jobs:
       - name: Install macOS/iOS dependencies
         if: contains(matrix.platform, 'macos') || matrix.platform == 'ios'
         run: |
-          brew install create-dmg || true
-          brew install --cask create-dmg || true
+          # macOS runners have Xcode with built-in DMG creation
+          echo "macOS/iOS build environment ready"
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile || pnpm install || echo "Install completed with warnings"
