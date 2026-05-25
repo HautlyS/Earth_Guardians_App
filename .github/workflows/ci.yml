@@ -181,15 +181,19 @@ jobs:
 
       - name: Build WASM
         run: |
-          cd packages/shared && wasm-pack build --target web --out-dir pkg || echo "WASM build skipped"
+          cd packages/shared
+          wasm-pack build --target web --out-dir pkg
+          ls -la pkg/ 2>/dev/null || echo "WASM output not found"
           cd ../..
         continue-on-error: true
 
       - name: Build Web
         run: |
-          cd apps/web && pnpm build || echo "Web build skipped"
-          cd ../..
-        continue-on-error: true
+          cd apps/web
+          pnpm exec vite build
+          ls -la dist/ 2>/dev/null || echo "Dist output not found"
+        env:
+          NODE_PATH: ""
 
       - name: Upload Web artifacts
         uses: actions/upload-artifact@v4

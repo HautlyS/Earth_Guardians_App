@@ -40,8 +40,8 @@ export async function initializeWasm(): Promise<void> {
   if (wasmInitialized) return
 
   try {
-    // Dynamic import of WASM module
-    const wasm = await import('@shared/wasm')
+    // Dynamic import of WASM module with correct file extension
+    const wasm = await import('@shared/wasm.js')
     await wasm.default()
     wasmModule = wasm
     wasmInitialized = true
