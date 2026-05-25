@@ -235,8 +235,7 @@ jobs:
 
       - name: Build Web App for Tauri
         run: |
-          pnpm exec vite build --config apps/web/vite.config.ts
-        working-directory: apps/web
+          cd apps/web && pnpm exec vite build
         env:
           NODE_PATH: ""
 
