@@ -266,14 +266,12 @@ jobs:
       - name: Check Rust formatting
         if: matrix.platform == 'linux'
         run: |
-          cd packages/shared && cargo fmt --check || true
-          cd ../apps/desktop/src-tauri && cargo fmt --check || true
+          cd apps/desktop/src-tauri && cargo fmt --check || true
 
       - name: Run Rust clippy
         if: matrix.platform == 'linux'
         run: |
-          cd packages/shared && cargo clippy -- -D warnings || true
-          cd ../apps/desktop/src-tauri && cargo clippy -- -D warnings || true
+          cd apps/desktop/src-tauri && cargo clippy -- -D warnings || true
 
       - name: Build Tauri
         run: |
