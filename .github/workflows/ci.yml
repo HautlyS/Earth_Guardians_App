@@ -196,18 +196,22 @@ jobs:
           - os: ubuntu-22.04
             platform: linux
             target: ''
+            artifact_dir: 'apps/desktop/src-tauri/target/release'
             artifact_name: linux-bundle
           - os: windows-latest
             platform: windows
             target: 'x86_64-pc-windows-msvc'
+            artifact_dir: 'apps/desktop/src-tauri/target/x86_64-pc-windows-msvc/release'
             artifact_name: windows-bundle
           - os: macos-latest
             platform: macos
             target: 'x86_64-apple-darwin'
+            artifact_dir: 'apps/desktop/src-tauri/target/release'
             artifact_name: macos-bundle
           - os: macos-latest
             platform: ios
             target: 'aarch64-apple-ios'
+            artifact_dir: 'apps/desktop/src-tauri/target/aarch64-apple-darwin/release'
             artifact_name: ios-bundle
 
     steps:
@@ -298,10 +302,11 @@ jobs:
         with:
           name: ${{ matrix.artifact_name }}
           path: |
-            apps/desktop/src-tauri/target/${{ matrix.target }}/release/bundle/**
-            apps/desktop/src-tauri/target/${{ matrix.target }}/release/*.exe
-            apps/desktop/src-tauri/target/${{ matrix.target }}/release/*.msi
-            apps/desktop/src-tauri/target/${{ matrix.target }}/release/Earth*.exe
+            ${{ matrix.artifact_dir }}/bundle/**
+            ${{ matrix.artifact_dir }}/*.exe
+            ${{ matrix.artifact_dir }}/*.msi
+            ${{ matrix.artifact_dir }}/Earth*.exe
+            ${{ matrix.artifact_dir }}/earth*.exe
           retention-days: 7
           if-no-files-found: ignore
 
