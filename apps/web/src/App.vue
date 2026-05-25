@@ -126,7 +126,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
-import { p2pManager } from '../../../src/p2p/p2p-manager'
+import { p2pManager } from '@utils/p2p-manager'
 import { initializeWasm, testCompressor, testHasher } from '@shared/earth_guardians_shared'
 
 // App info
