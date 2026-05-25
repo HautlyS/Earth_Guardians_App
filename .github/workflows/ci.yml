@@ -189,9 +189,7 @@ jobs:
 
       - name: Build Web
         run: |
-          cd apps/web
-          pnpm exec vite build
-          ls -la dist/ 2>/dev/null || echo "Dist output not found"
+          cd apps/web && pnpm exec vite build
         env:
           NODE_PATH: ""
 
