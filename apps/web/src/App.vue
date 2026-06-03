@@ -1,500 +1,144 @@
 <template>
-  <div id="earth-guardians-app">
-    <header class="app-header">
-      <nav class="nav">
-        <div class="nav-brand">
-          <h1 class="font-display text-xl">EARTH GUARDIANS</h1>
-          <span class="version-badge">v{{ version }}</span>
-        </div>
-        <div class="flex gap-md">
-          <router-link to="/" class="nav-item">Feed</router-link>
-          <router-link to="/projects" class="nav-item">Projects</router-link>
-          <router-link to="/docs" class="nav-item">Docs</router-link>
-          <router-link to="/email" class="nav-item">Email</router-link>
-          <router-link to="/p2p" class="nav-item">P2P Network</router-link>
-          <router-link to="/settings" class="nav-item">Settings</router-link>
-        </div>
-        <div class="theme-switcher">
-          <button @click="setTheme('light')" :class="{ active: theme === 'light' }" title="Light">☀️</button>
-          <button @click="setTheme('dark')" :class="{ active: theme === 'dark' }" title="Dark">🌙</button>
-          <button @click="setTheme('high-contrast')" :class="{ active: theme === 'high-contrast' }" title="High Contrast">⚡</button>
-        </div>
-      </nav>
-    </header>
+  <div id="earth-guardians-app" :data-theme="theme">
+    <AppHeader />
     
     <main class="app-main">
-      <div class="container">
-        <section class="hero">
-          <h2 class="text-3xl font-display mt-xl mb-lg">Welcome to Earth Guardians</h2>
-          <p class="text-lg mb-xl">Neo-brutalist collaborative platform with P2P, WASM, and decentralized storage.</p>
-        </section>
-        
-        <div class="grid grid-cols-3 gap-xl">
-          <div class="card">
-            <div class="card-header">
-              <h3 class="card-title">🤝 P2P NETWORK</h3>
-            </div>
-            <div class="card-body">
-              <p><strong>Peer ID:</strong> <code>{{ peerId || 'Connecting...' }}</code></p>
-              <p><strong>Connected Peers:</strong> <span class="badge">{{ connectedPeers }}</span></p>
-              <p><strong>STUN Servers:</strong> <span class="badge">{{ stunServers }}</span></p>
-              <div class="mt-md">
-                <button @click="connectP2P" class="btn btn-primary">Connect</button>
-                <button @click="disconnectP2P" class="btn btn-secondary">Disconnect</button>
-              </div>
-            </div>
-          </div>
-
-          <div class="card">
-            <div class="card-header">
-              <h3 class="card-title">⚡ WASM ENGINE</h3>
-            </div>
-            <div class="card-body">
-              <p><strong>Status:</strong> <span :class="['badge', wasmReady ? 'badge-success' : 'badge-warning']">{{ wasmReady ? 'Ready' : 'Loading' }}</span></p>
-              <p><strong>Compressor:</strong> <span class="badge">{{ compressorStatus }}</span></p>
-              <p><strong>Hasher:</strong> <span class="badge">{{ hasherStatus }}</span></p>
-              <div class="mt-md">
-                <button @click="runWasmTest" class="btn btn-primary" :disabled="!wasmReady">Run Test</button>
-              </div>
-            </div>
-          </div>
-
-          <div class="card">
-            <div class="card-header">
-              <h3 class="card-title">🌐 SUPABASE</h3>
-            </div>
-            <div class="card-body">
-              <p><strong>Status:</strong> <span :class="['badge', dbConnected ? 'badge-success' : 'badge-warning']">{{ dbConnected ? 'Connected' : 'Disconnected' }}</span></p>
-              <p><strong>Real-time:</strong> <span class="badge">{{ realtimeEnabled ? 'Active' : 'Inactive' }}</span></p>
-              <div class="mt-md">
-                <button @click="testSupabase" class="btn btn-primary">Test Connection</button>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="card mt-xl">
-          <div class="card-header">
-            <h3 class="card-title">📊 PERFORMANCE METRICS</h3>
-          </div>
-          <div class="card-body">
-            <div class="metrics-grid">
-              <div class="metric">
-                <span class="metric-label">Build Time</span>
-                <span class="metric-value">{{ buildTime }}ms</span>
-              </div>
-              <div class="metric">
-                <span class="metric-label">Memory</span>
-                <span class="metric-value">{{ memoryUsage }} MB</span>
-              </div>
-              <div class="metric">
-                <span class="metric-label">WASM Size</span>
-                <span class="metric-value">{{ wasmSize }} KB</span>
-              </div>
-              <div class="metric">
-                <span class="metric-label">Compression Ratio</span>
-                <span class="metric-value">{{ compressionRatio }}%</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="card mt-xl">
-          <div class="card-header">
-            <h3 class="card-title">🚀 QUICK ACTIONS</h3>
-          </div>
-          <div class="card-body">
-            <div class="actions-grid">
-              <button @click="exportData" class="btn btn-primary">Export Data</button>
-              <button @click="importData" class="btn btn-secondary">Import Data</button>
-              <button @click="runDiagnostics" class="btn btn-secondary">Diagnostics</button>
-              <button @click="clearCache" class="btn btn-danger">Clear Cache</button>
-            </div>
-          </div>
-        </div>
-      </div>
+      <router-view v-slot="{ Component }">
+        <transition name="fade" mode="out-in">
+          <component :is="Component" />
+        </transition>
+      </router-view>
     </main>
 
-    <footer class="app-footer">
-      <div class="container">
-        <p>© 2024 Earth Guardians NGO • Built with ❤️ and Rust/WASM</p>
-        <p class="mt-sm text-sm text-muted">Powered by P2P, WebAssembly, and decentralized technology</p>
-      </div>
-    </footer>
+    <AppFooter />
+    
+    <!-- Toast Notifications -->
+    <div class="toast-container">
+      <TransitionGroup name="toast">
+        <div 
+          v-for="toast in toasts" 
+          :key="toast.id" 
+          :class="['toast', `toast-${toast.type}`]"
+        >
+          <span class="toast-icon">{{ getToastIcon(toast.type) }}</span>
+          <span class="toast-message">{{ toast.message }}</span>
+          <button class="toast-close" @click="removeToast(toast.id)">×</button>
+        </div>
+      </TransitionGroup>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { p2pManager, type P2PStats } from '@utils/p2p-manager'
-import init, { Compressor, Hasher, P2PUtils } from '@shared/earth_guardians_shared'
+import { computed } from 'vue'
+import { useAuthStore } from './stores/auth'
+import { useUIStore } from './stores/ui'
+import AppHeader from './components/AppHeader.vue'
+import AppFooter from './components/AppFooter.vue'
 
-// App info
-const version = ref(__APP_VERSION__ || '1.0.0')
+const authStore = useAuthStore()
+const uiStore = useUIStore()
 
-// Theme
-const theme = ref('light')
+const theme = computed(() => uiStore.theme)
+const toasts = computed(() => uiStore.toasts)
 
-// P2P
-const peerId = ref('')
-const connectedPeers = ref(0)
-const stunServers = ref(0)
-
-// WASM
-const wasmReady = ref(false)
-const compressorStatus = ref('idle')
-const hasherStatus = ref('idle')
-const wasmSize = ref(0)
-const compressionRatio = ref(0)
-
-// Supabase
-const dbConnected = ref(false)
-const realtimeEnabled = ref(false)
-
-// Performance
-const buildTime = ref(0)
-const memoryUsage = ref(0)
-
-const startTime = Date.now()
-
-onMounted(async () => {
-  buildTime.value = Date.now() - startTime
-  
-  // Initialize P2P
-  connectP2P()
-  
-  // Initialize WASM
-  try {
-    await init()
-    wasmReady.value = true
-    compressorStatus.value = 'loaded'
-    hasherStatus.value = 'loaded'
-    
-    // Get WASM size estimate
-    if (typeof performance !== 'undefined' && 'memory' in performance) {
-      const mem = (performance as any).memory
-      if (mem) {
-        memoryUsage.value = Math.round(mem.usedJSHeapSize / 1024 / 1024)
-      }
-    }
-  } catch (e) {
-    console.warn('WASM initialization failed:', e)
-    compressorStatus.value = 'failed'
-    hasherStatus.value = 'failed'
+function getToastIcon(type: string) {
+  const icons: Record<string, string> = {
+    success: '✓',
+    error: '✕',
+    warning: '⚠',
+    info: 'ℹ'
   }
-})
-
-function connectP2P() {
-  const stats = p2pManager.getStats()
-  peerId.value = stats.peerId
-  connectedPeers.value = stats.connectedPeers
-  stunServers.value = stats.stunServers
+  return icons[type] || 'ℹ'
 }
 
-function disconnectP2P() {
-  peerId.value = ''
-  connectedPeers.value = 0
-}
-
-function setTheme(t: string) {
-  theme.value = t
-  document.documentElement.setAttribute('data-theme', t)
-  localStorage.setItem('theme', t)
-}
-
-async function runWasmTest() {
-  if (!wasmReady.value) return
-  
-  try {
-    compressorStatus.value = 'testing'
-    const testData = new Uint8Array(1024).fill(65)
-    
-    // Use WASM Compressor
-    const compressor = new Compressor()
-    const compressed = compressor.compress(testData)
-    compressionRatio.value = Math.round((1 - Number(compressed.length) / testData.length) * 100)
-    compressorStatus.value = 'ready'
-    
-    hasherStatus.value = 'testing'
-    const hasher = new Hasher()
-    hasher.update(testData)
-    hasher.finish()
-    hasherStatus.value = 'ready'
-  } catch (e) {
-    console.error('WASM test failed:', e)
-    compressorStatus.value = 'error'
-    hasherStatus.value = 'error'
-  }
-}
-
-async function testSupabase() {
-  // Supabase connection test would go here
-  dbConnected.value = true
-  realtimeEnabled.value = true
-}
-
-function exportData() {
-  const data = {
-    peerId: peerId.value,
-    theme: theme.value,
-    timestamp: Date.now()
-  }
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = 'earth-guardians-export.json'
-  a.click()
-  URL.revokeObjectURL(url)
-}
-
-function importData() {
-  const input = document.createElement('input')
-  input.type = 'file'
-  input.accept = '.json'
-  input.onchange = async (e) => {
-    const file = (e.target as HTMLInputElement).files?.[0]
-    if (file) {
-      const text = await file.text()
-      const data = JSON.parse(text)
-      console.log('Imported data:', data)
-    }
-  }
-  input.click()
-}
-
-function runDiagnostics() {
-  console.log('Running diagnostics...')
-  const diagnostics = {
-    wasmReady: wasmReady.value,
-    p2pConnected: connectedPeers.value > 0,
-    dbConnected: dbConnected.value,
-    memory: memoryUsage.value,
-    buildTime: buildTime.value
-  }
-  console.table(diagnostics)
-}
-
-function clearCache() {
-  if (confirm('Clear all cached data?')) {
-    localStorage.clear()
-    sessionStorage.clear()
-    window.location.reload()
-  }
+function removeToast(id: string) {
+  uiStore.removeToast(id)
 }
 </script>
 
 <style scoped>
-.app-header {
-  border-bottom: 3px solid var(--border-color);
-  background: var(--bg-primary);
-  padding: var(--spacing-md) 0;
-}
-
-.nav {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-xl);
-  padding: 0 var(--spacing-lg);
-}
-
-.nav-brand {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-sm);
-}
-
-.version-badge {
-  font-size: var(--text-xs);
-  background: var(--accent-color);
-  color: var(--bg-primary);
-  padding: 2px 8px;
-  border-radius: 4px;
-}
-
-.nav-item {
-  padding: var(--spacing-sm) var(--spacing-md);
-  border: 2px solid transparent;
-  transition: all 0.2s;
-}
-
-.nav-item:hover {
-  border-color: var(--accent-color);
-}
-
-.theme-switcher {
-  display: flex;
-  gap: var(--spacing-xs);
-}
-
-.theme-switcher button {
-  padding: var(--spacing-sm);
-  border: 2px solid var(--border-color);
-  background: transparent;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.theme-switcher button.active {
-  background: var(--accent-color);
-  color: var(--bg-primary);
-}
-
 .app-main {
-  padding: var(--spacing-xl) 0;
   min-height: calc(100vh - 160px);
 }
 
-.hero {
-  text-align: center;
-  margin-bottom: var(--spacing-xl);
+.toast-container {
+  position: fixed;
+  top: 80px;
+  right: 20px;
+  z-index: var(--z-toast, 400);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
-.grid {
-  display: grid;
-  gap: var(--spacing-xl);
-}
-
-.grid-cols-3 {
-  grid-template-columns: repeat(3, 1fr);
-}
-
-.card {
-  border: 3px solid var(--border-color);
+.toast {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
   background: var(--bg-primary);
-}
-
-.card-header {
-  background: var(--accent-color);
-  color: var(--bg-primary);
-  padding: var(--spacing-md);
-  font-weight: bold;
-}
-
-.card-body {
-  padding: var(--spacing-lg);
-}
-
-.mt-xl { margin-top: var(--spacing-xl); }
-.mt-md { margin-top: var(--spacing-md); }
-.mt-sm { margin-top: var(--spacing-sm); }
-
-.badge {
-  display: inline-block;
-  padding: 2px 8px;
-  background: var(--text-muted);
-  color: var(--bg-primary);
-  font-size: var(--text-sm);
-  border-radius: 4px;
-}
-
-.badge-success { background: #10b981; }
-.badge-warning { background: #f59e0b; }
-
-code {
-  font-family: monospace;
-  background: var(--bg-secondary);
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-size: 0.85em;
-}
-
-.metrics-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: var(--spacing-lg);
-}
-
-.metric {
-  text-align: center;
-  padding: var(--spacing-md);
-  background: var(--bg-secondary);
   border: 2px solid var(--border-color);
+  box-shadow: var(--shadow-md);
+  min-width: 280px;
+  max-width: 400px;
 }
 
-.metric-label {
-  display: block;
-  font-size: var(--text-sm);
-  color: var(--text-muted);
-  margin-bottom: var(--spacing-xs);
+.toast-success {
+  border-color: var(--success-color);
 }
 
-.metric-value {
-  display: block;
-  font-size: var(--text-xl);
-  font-weight: bold;
-  color: var(--accent-color);
+.toast-error {
+  border-color: var(--error-color);
 }
 
-.actions-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: var(--spacing-md);
+.toast-warning {
+  border-color: var(--warning-color);
 }
 
-.btn {
-  padding: var(--spacing-sm) var(--spacing-lg);
-  border: 2px solid var(--border-color);
+.toast-info {
+  border-color: var(--info-color);
+}
+
+.toast-icon {
+  font-size: 1.2rem;
+}
+
+.toast-message {
+  flex: 1;
+}
+
+.toast-close {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
   cursor: pointer;
-  font-weight: bold;
-  transition: all 0.2s;
+  padding: 0;
+  line-height: 1;
 }
 
-.btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.2s ease;
 }
 
-.btn-primary {
-  background: var(--accent-color);
-  color: var(--bg-primary);
-  border-color: var(--accent-color);
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
 }
 
-.btn-primary:hover:not(:disabled) {
-  filter: brightness(1.1);
+.toast-enter-active,
+.toast-leave-active {
+  transition: all 0.3s ease;
 }
 
-.btn-secondary {
-  background: var(--bg-primary);
-  color: var(--text-color);
+.toast-enter-from {
+  transform: translateX(100%);
+  opacity: 0;
 }
 
-.btn-secondary:hover:not(:disabled) {
-  background: var(--bg-secondary);
-}
-
-.btn-danger {
-  background: #ef4444;
-  color: white;
-  border-color: #ef4444;
-}
-
-.app-footer {
-  border-top: 3px solid var(--border-color);
-  padding: var(--spacing-xl) 0;
-  text-align: center;
-  margin-top: var(--spacing-xl);
-}
-
-.text-muted {
-  color: var(--text-muted);
-}
-
-.text-sm {
-  font-size: var(--text-sm);
-}
-
-@media (max-width: 768px) {
-  .grid-cols-3,
-  .metrics-grid,
-  .actions-grid {
-    grid-template-columns: 1fr;
-  }
-  
-  .nav {
-    flex-wrap: wrap;
-    gap: var(--spacing-md);
-  }
+.toast-leave-to {
+  transform: translateX(100%);
+  opacity: 0;
 }
 </style>
