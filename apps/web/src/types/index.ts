@@ -237,12 +237,3 @@ export type DeepPartial<T> = {
 export type Nullable<T> = T | null
 export type Optional<T> = T | undefined
 export type PromiseOrValue<T> = T | Promise<T>
-
-// Re-export commonly used types
-export {
-  RTCPeerConnection,
-  RTCSessionDescriptionInit,
-  RTCIceCandidateInit,
-  RTCDataChannel,
-  RTCDataChannelState
-} from 'webrtc'

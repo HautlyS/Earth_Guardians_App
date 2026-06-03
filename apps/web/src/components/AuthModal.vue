@@ -1,84 +1,91 @@
 <template>
-  <div class="modal-overlay" @click.self="$emit('close')">
-    <div class="auth-modal">
+  <div class="modal-overlay" @click.self="close">
+    <div class="auth-modal" role="dialog" aria-modal="true" :aria-labelledby="'auth-modal-title'">
       <div class="modal-header">
-        <h2>{{ isLogin ? 'Sign In' : 'Create Account' }}</h2>
-        <button class="close-btn" @click="$emit('close')">×</button>
+        <h2 id="auth-modal-title">{{ isLogin ? 'Sign In' : 'Create Account' }}</h2>
+        <button class="close-btn" @click="close" aria-label="Close auth dialog">×</button>
       </div>
 
-      <form @submit.prevent="handleSubmit" class="auth-form">
-        <div v-if="error" class="error-message">{{ error }}</div>
-        <div v-if="successMessage" class="success-message">{{ successMessage }}</div>
+      <form @submit.prevent="handleSubmit" class="auth-form" novalidate>
+        <div v-if="error" class="error-message" role="alert">{{ error }}</div>
+        <div v-if="successMessage" class="success-message" role="status">{{ successMessage }}</div>
 
         <div class="form-group">
-          <label for="email" class="label">Email</label>
-          <input 
-            id="email"
-            v-model="email" 
-            type="email" 
-            class="input" 
+          <label for="auth-email" class="label">Email</label>
+          <input
+            id="auth-email"
+            v-model.trim="email"
+            type="email"
+            class="input"
             placeholder="you@example.com"
+            autocomplete="email"
             required
           />
         </div>
 
-        <div class="form-group" v-if="!isLogin">
-          <label for="password" class="label">Password</label>
-          <input 
-            id="password"
-            v-model="password" 
-            type="password" 
-            class="input" 
-            placeholder="••••••••"
-            minlength="8"
-            required
-          />
-        </div>
+        <template v-if="!isLogin">
+          <div class="form-group">
+            <label for="auth-password" class="label">Password</label>
+            <input
+              id="auth-password"
+              v-model="password"
+              type="password"
+              class="input"
+              placeholder="At least 8 characters"
+              autocomplete="new-password"
+              minlength="8"
+              required
+            />
+            <small v-if="password && !isStrongPassword" class="hint">
+              Use 8+ chars with a mix of letters, numbers, and symbols.
+            </small>
+          </div>
 
-        <div class="form-group" v-if="!isLogin">
-          <label for="confirmPassword" class="label">Confirm Password</label>
-          <input 
-            id="confirmPassword"
-            v-model="confirmPassword" 
-            type="password" 
-            class="input" 
-            placeholder="••••••••"
-            required
-          />
-        </div>
+          <div class="form-group">
+            <label for="auth-confirm" class="label">Confirm Password</label>
+            <input
+              id="auth-confirm"
+              v-model="confirmPassword"
+              type="password"
+              class="input"
+              placeholder="Repeat your password"
+              autocomplete="new-password"
+              minlength="8"
+              required
+            />
+          </div>
+        </template>
 
-        <button type="submit" class="btn btn-primary btn-block" :disabled="loading">
-          {{ loading ? 'Please wait...' : (isLogin ? 'Send Magic Link' : 'Create Account') }}
+        <button
+          type="submit"
+          class="btn btn-primary btn-block"
+          :disabled="loading || !canSubmit"
+        >
+          {{ loading ? 'Please wait...' : (isLogin ? 'Send Sign-In Link' : 'Create Account') }}
         </button>
       </form>
 
       <div class="auth-footer">
         <p v-if="isLogin">
-          Don't have an account? 
-          <button class="switch-btn" @click="isLogin = false">Sign up</button>
+          Don't have an account?
+          <button class="switch-btn" @click="switchMode(false)">Sign up</button>
         </p>
         <p v-else>
-          Already have an account? 
-          <button class="switch-btn" @click="isLogin = true">Sign in</button>
+          Already have an account?
+          <button class="switch-btn" @click="switchMode(true)">Sign in</button>
         </p>
-      </div>
-
-      <div class="demo-hint">
-        <p><strong>Demo Mode:</strong> Enter any email to test the auth flow.</p>
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useAuthStore } from '../stores/auth'
-import { useUIStore } from '../stores/ui'
 
-const emit = defineEmits(['close'])
+const emit = defineEmits<{ (e: 'close'): void }>()
 
 const authStore = useAuthStore()
-const uiStore = useUIStore()
 
 const isLogin = ref(true)
 const email = ref('')
@@ -88,13 +95,47 @@ const loading = ref(false)
 const error = ref('')
 const successMessage = ref('')
 
+const isStrongPassword = computed(() => {
+  if (password.value.length < 8) return false
+  const hasLetter = /[A-Za-z]/.test(password.value)
+  const hasNumber = /[0-9]/.test(password.value)
+  return hasLetter && hasNumber
+})
+
+const canSubmit = computed(() => {
+  if (!email.value) return false
+  if (isLogin.value) return true
+  if (password.value.length < 8) return false
+  return password.value === confirmPassword.value
+})
+
+function close() {
+  emit('close')
+}
+
+function switchMode(toLogin: boolean) {
+  isLogin.value = toLogin
+  error.value = ''
+  successMessage.value = ''
+  if (toLogin) {
+    password.value = ''
+    confirmPassword.value = ''
+  }
+}
+
 async function handleSubmit() {
   error.value = ''
   successMessage.value = ''
 
-  if (!isLogin.value && password.value !== confirmPassword.value) {
-    error.value = 'Passwords do not match'
-    return
+  if (!isLogin.value) {
+    if (password.value !== confirmPassword.value) {
+      error.value = 'Passwords do not match'
+      return
+    }
+    if (!isStrongPassword.value) {
+      error.value = 'Choose a stronger password (8+ chars, letters and numbers).'
+      return
+    }
   }
 
   loading.value = true
@@ -103,14 +144,17 @@ async function handleSubmit() {
     if (isLogin.value) {
       const result = await authStore.signInWithEmail(email.value)
       if (result.success) {
-        successMessage.value = 'Check your email for the magic link!'
+        successMessage.value = 'Check your email for a one-time sign-in link.'
+        email.value = ''
       } else {
-        error.value = result.error || 'Failed to send magic link'
+        error.value = result.error || 'Failed to send sign-in link'
       }
     } else {
       const result = await authStore.signUp(email.value, password.value)
       if (result.success) {
-        successMessage.value = 'Account created! Check your email to verify.'
+        successMessage.value = 'Account created! Check your email to verify before signing in.'
+        password.value = ''
+        confirmPassword.value = ''
       } else {
         error.value = result.error || 'Failed to create account'
       }
@@ -121,6 +165,19 @@ async function handleSubmit() {
     loading.value = false
   }
 }
+
+function onKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape') close()
+}
+
+onMounted(() => {
+  document.addEventListener('keydown', onKeydown)
+  document.body.style.overflow = 'hidden'
+})
+onBeforeUnmount(() => {
+  document.removeEventListener('keydown', onKeydown)
+  document.body.style.overflow = ''
+})
 </script>
 
 <style scoped>
@@ -140,6 +197,8 @@ async function handleSubmit() {
   background: var(--bg-primary);
   border: 3px solid var(--border-color);
   box-shadow: var(--shadow-xl);
+  max-height: 90vh;
+  overflow-y: auto;
 }
 
 .modal-header {
@@ -152,6 +211,7 @@ async function handleSubmit() {
 
 .modal-header h2 {
   margin: 0;
+  font-size: 1.25rem;
 }
 
 .close-btn {
@@ -159,6 +219,7 @@ async function handleSubmit() {
   border: none;
   font-size: 2rem;
   cursor: pointer;
+  line-height: 1;
 }
 
 .auth-form {
@@ -183,6 +244,7 @@ async function handleSubmit() {
   border: 2px solid var(--border-color);
   background: var(--bg-secondary);
   font-size: var(--text-base);
+  color: var(--text-color);
 }
 
 .input:focus {
@@ -220,13 +282,13 @@ async function handleSubmit() {
   color: var(--accent-color);
   cursor: pointer;
   font-weight: bold;
+  text-decoration: underline;
 }
 
-.demo-hint {
-  padding: var(--spacing-md);
-  background: var(--bg-secondary);
-  font-size: var(--text-sm);
+.hint {
+  display: block;
+  margin-top: var(--spacing-xs);
+  font-size: var(--text-xs);
   color: var(--text-muted);
-  text-align: center;
 }
 </style>

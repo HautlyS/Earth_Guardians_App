@@ -85,7 +85,7 @@ export default defineConfig(({ mode }) => {
         destDir: 'assets/wasm',
         name: 'earth_guardians_wasm',
       },
-      reportCompressedSize: true,
+      reportCompressedSize: process.env.CI ? false : true,
       chunkSizeWarningLimit: 1000, // 1MB
     },
     server: {

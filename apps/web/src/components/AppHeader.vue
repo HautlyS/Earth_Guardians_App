@@ -1,13 +1,13 @@
 <template>
   <header class="app-header">
-    <nav class="nav container">
+    <nav class="nav container" aria-label="Primary">
       <router-link to="/" class="nav-brand">
-        <h1 class="font-display text-xl">EARTH GUARDIANS</h1>
-        <span class="version-badge">v{{ version }}</span>
+        <span class="font-display nav-brand-title">EARTH GUARDIANS</span>
+        <span class="version-badge" aria-label="Version">v{{ version }}</span>
       </router-link>
 
       <div class="nav-links" v-if="isAuthenticated">
-        <router-link to="/" class="nav-item">Feed</router-link>
+        <router-link to="/" class="nav-item" exact-active-class="router-link-active">Feed</router-link>
         <router-link to="/projects" class="nav-item">Projects</router-link>
         <router-link to="/tasks" class="nav-item">Tasks</router-link>
         <router-link to="/docs" class="nav-item">Docs</router-link>
@@ -17,82 +17,147 @@
 
       <div class="nav-actions">
         <ThemeSwitcher />
-        
-        <button class="btn btn-icon" @click="toggleSearch" title="Search">
-          🔍
+
+        <button
+          class="btn btn-icon"
+          @click="openSearch"
+          :aria-label="searchOpen ? 'Close search' : 'Open search'"
+          :aria-expanded="searchOpen"
+        >
+          <span aria-hidden="true">🔍</span>
         </button>
 
         <NotificationBell v-if="isAuthenticated" />
 
-        <div class="user-menu" v-if="isAuthenticated">
-          <button class="user-avatar-btn" @click="toggleUserMenu">
+        <div class="user-menu" v-if="isAuthenticated" ref="userMenuRef">
+          <button
+            class="user-avatar-btn"
+            @click="toggleUserMenu"
+            :aria-label="`Open user menu for ${displayName}`"
+            :aria-expanded="userMenuOpen"
+            aria-haspopup="menu"
+          >
             <UserAvatar :src="avatarUrl" :name="displayName" size="sm" />
           </button>
-          
-          <div class="dropdown-menu" v-if="userMenuOpen">
-            <router-link to="/profile" class="dropdown-item">Profile</router-link>
-            <router-link to="/settings" class="dropdown-item">Settings</router-link>
-            <hr class="dropdown-divider">
-            <button class="dropdown-item" @click="handleSignOut">Sign Out</button>
+
+          <div class="dropdown-menu" v-if="userMenuOpen" role="menu">
+            <router-link to="/profile" class="dropdown-item" role="menuitem" @click="closeUserMenu">
+              Profile
+            </router-link>
+            <router-link to="/settings" class="dropdown-item" role="menuitem" @click="closeUserMenu">
+              Settings
+            </router-link>
+            <hr class="dropdown-divider" />
+            <button class="dropdown-item" role="menuitem" @click="handleSignOut">Sign Out</button>
           </div>
         </div>
 
-        <button 
-          v-if="!isAuthenticated" 
-          class="btn btn-primary" 
+        <button
+          v-if="!isAuthenticated"
+          class="btn btn-primary"
           @click="openAuthModal"
         >
           Sign In
         </button>
+
+        <button
+          class="btn btn-icon mobile-menu-btn"
+          v-if="isAuthenticated"
+          @click="toggleMobileMenu"
+          :aria-label="mobileMenuOpen ? 'Close menu' : 'Open menu'"
+          :aria-expanded="mobileMenuOpen"
+        >
+          <span aria-hidden="true">{{ mobileMenuOpen ? '✕' : '☰' }}</span>
+        </button>
       </div>
     </nav>
 
-    <SearchModal v-if="searchOpen" @close="searchOpen = false" />
-    <AuthModal v-if="authModalOpen" @close="authModalOpen = false" />
+    <Transition name="drawer">
+      <div v-if="isAuthenticated && mobileMenuOpen" class="mobile-drawer" role="navigation" aria-label="Mobile menu">
+        <router-link to="/" class="nav-item" @click="closeMobileMenu">Feed</router-link>
+        <router-link to="/projects" class="nav-item" @click="closeMobileMenu">Projects</router-link>
+        <router-link to="/tasks" class="nav-item" @click="closeMobileMenu">Tasks</router-link>
+        <router-link to="/docs" class="nav-item" @click="closeMobileMenu">Docs</router-link>
+        <router-link to="/email" class="nav-item" @click="closeMobileMenu">Email</router-link>
+        <router-link to="/p2p" class="nav-item" @click="closeMobileMenu">P2P</router-link>
+        <router-link to="/settings" class="nav-item" @click="closeMobileMenu">Settings</router-link>
+        <router-link to="/profile" class="nav-item" @click="closeMobileMenu">Profile</router-link>
+      </div>
+    </Transition>
   </header>
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { useUIStore } from '../stores/ui'
 import ThemeSwitcher from './ThemeSwitcher.vue'
 import UserAvatar from './UserAvatar.vue'
 import NotificationBell from './NotificationBell.vue'
-import SearchModal from './SearchModal.vue'
-import AuthModal from './AuthModal.vue'
 
 const router = useRouter()
 const authStore = useAuthStore()
 const uiStore = useUIStore()
 
 const version = ref(__APP_VERSION__ || '1.0.0')
-const searchOpen = ref(false)
 const userMenuOpen = ref(false)
+const userMenuRef = ref<HTMLElement | null>(null)
 
 const isAuthenticated = computed(() => authStore.isAuthenticated)
 const displayName = computed(() => authStore.displayName)
 const avatarUrl = computed(() => authStore.avatarUrl)
-const authModalOpen = computed(() => uiStore.authModalOpen)
+const searchOpen = computed(() => uiStore.searchModalOpen)
+const mobileMenuOpen = computed(() => uiStore.mobileMenuOpen)
 
-function toggleSearch() {
-  searchOpen.value = !searchOpen.value
+function openSearch() {
+  if (uiStore.searchModalOpen) uiStore.closeSearchModal()
+  else uiStore.openSearchModal()
 }
-
+function toggleMobileMenu() {
+  uiStore.toggleMobileMenu()
+}
+function closeMobileMenu() {
+  uiStore.mobileMenuOpen = false
+}
 function toggleUserMenu() {
   userMenuOpen.value = !userMenuOpen.value
 }
-
+function closeUserMenu() {
+  userMenuOpen.value = false
+}
 function openAuthModal() {
   uiStore.openAuthModal()
 }
 
 async function handleSignOut() {
+  closeUserMenu()
   await authStore.signOut()
-  userMenuOpen.value = false
-  router.push('/')
+  router.push('/').catch(() => {})
 }
+
+function onDocumentClick(e: MouseEvent) {
+  if (!userMenuOpen.value) return
+  const target = e.target as Node | null
+  if (target && userMenuRef.value && !userMenuRef.value.contains(target)) {
+    userMenuOpen.value = false
+  }
+}
+function onKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape') {
+    if (userMenuOpen.value) userMenuOpen.value = false
+    if (uiStore.mobileMenuOpen) uiStore.mobileMenuOpen = false
+  }
+}
+
+onMounted(() => {
+  document.addEventListener('click', onDocumentClick)
+  document.addEventListener('keydown', onKeydown)
+})
+onBeforeUnmount(() => {
+  document.removeEventListener('click', onDocumentClick)
+  document.removeEventListener('keydown', onKeydown)
+})
 </script>
 
 <style scoped>
@@ -117,6 +182,12 @@ async function handleSignOut() {
   gap: var(--spacing-sm);
   text-decoration: none;
   color: var(--text-color);
+}
+
+.nav-brand-title {
+  font-size: 1.25rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
 }
 
 .version-badge {
@@ -165,6 +236,11 @@ async function handleSignOut() {
   cursor: pointer;
   font-size: 1.2rem;
   padding: var(--spacing-xs);
+  line-height: 1;
+}
+
+.mobile-menu-btn {
+  display: none;
 }
 
 .user-menu {
@@ -179,8 +255,10 @@ async function handleSignOut() {
   padding: 2px;
 }
 
-.user-avatar-btn:hover {
+.user-avatar-btn:hover,
+.user-avatar-btn:focus-visible {
   border-color: var(--accent-color);
+  outline: none;
 }
 
 .dropdown-menu {
@@ -192,6 +270,7 @@ async function handleSignOut() {
   box-shadow: var(--shadow-lg);
   min-width: 180px;
   margin-top: var(--spacing-sm);
+  z-index: var(--z-dropdown);
 }
 
 .dropdown-item {
@@ -204,10 +283,13 @@ async function handleSignOut() {
   width: 100%;
   text-align: left;
   cursor: pointer;
+  font-size: var(--text-base);
 }
 
-.dropdown-item:hover {
+.dropdown-item:hover,
+.dropdown-item:focus-visible {
   background: var(--bg-secondary);
+  outline: none;
 }
 
 .dropdown-divider {
@@ -216,8 +298,52 @@ async function handleSignOut() {
   border-top: 1px solid var(--border-color);
 }
 
+.mobile-drawer {
+  display: none;
+  flex-direction: column;
+  background: var(--bg-secondary);
+  border-top: 2px solid var(--border-color);
+  padding: var(--spacing-md) 0;
+  gap: var(--spacing-xs);
+}
+
+.mobile-drawer .nav-item {
+  padding: var(--spacing-md) var(--spacing-lg);
+}
+
+.drawer-enter-active,
+.drawer-leave-active {
+  transition: max-height 0.25s ease, opacity 0.25s ease;
+  overflow: hidden;
+}
+.drawer-enter-from,
+.drawer-leave-to {
+  max-height: 0;
+  opacity: 0;
+}
+.drawer-enter-to,
+.drawer-leave-from {
+  max-height: 600px;
+  opacity: 1;
+}
+
 @media (max-width: 768px) {
   .nav-links {
+    display: none;
+  }
+  .mobile-menu-btn {
+    display: inline-flex;
+  }
+  .mobile-drawer {
+    display: flex;
+  }
+}
+
+@media (max-width: 480px) {
+  .nav-brand-title {
+    font-size: 1rem;
+  }
+  .version-badge {
     display: none;
   }
 }

@@ -1,6 +1,10 @@
 /**
  * Get Profile Edge Function
  * Earth Guardians Platform
+ *
+ * Returns a profile, stats (projects, open tasks, crews, documents), and
+ * recent activity. Staff/admin can view any profile; everyone else can
+ * only view themselves.
  */
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
@@ -22,60 +26,75 @@ serve(async (req) => {
     }
 
     const url = new URL(req.url)
-    const targetUserId = url.searchParams.get('user_id') || user.id
+    const requestedId = url.searchParams.get('user_id')
+    const targetUserId = requestedId || user.id
 
-    // Get profile
+    // Self always allowed; otherwise only staff / regional_councilor can view
+    if (targetUserId !== user.id) {
+      const { data: me } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('user_id', user.id)
+        .maybeSingle()
+      const role = (me as { role?: string } | null)?.role
+      if (role !== 'staff' && role !== 'regional_councilor') {
+        return errorResponse('Forbidden', 403)
+      }
+    }
+
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
-      .select(`
-        *,
-        notification_preferences(*)
-      `)
+      .select('*')
       .eq('user_id', targetUserId)
-      .single()
+      .maybeSingle()
 
     if (profileError) {
+      return errorResponse('Profile fetch failed: ' + profileError.message, 500)
+    }
+    if (!profile) {
       return errorResponse('Profile not found', 404)
     }
 
-    // Get user stats
-    const { count: projectsCount } = await supabase
-      .from('projects')
-      .select('*', { count: 'exact', head: true })
-      .eq('created_by', targetUserId)
-      .is('deleted_at', null)
-
-    const { count: tasksCount } = await supabase
-      .from('tasks')
-      .select('*', { count: 'exact', head: true })
-      .contains('assignees', [targetUserId])
-      .is('deleted_at', null)
-
-    const { count: crewCount } = await supabase
-      .from('crew_members')
-      .select('*', { count: 'exact', head: true })
-      .eq('user_id', targetUserId)
-
-    // Get recent activity
-    const { data: recentActivity } = await supabase
-      .from('activity_logs')
-      .select('action, created_at')
-      .eq('user_id', targetUserId)
-      .order('created_at', { ascending: false })
-      .limit(10)
+    const [projectsRes, tasksRes, crewRes, docsRes, activityRes] = await Promise.all([
+      supabase
+        .from('projects')
+        .select('id', { count: 'exact', head: true })
+        .eq('created_by', targetUserId)
+        .is('deleted_at', null),
+      supabase
+        .from('tasks')
+        .select('id', { count: 'exact', head: true })
+        .contains('assignees', [targetUserId])
+        .is('deleted_at', null)
+        .neq('status', 'done'),
+      supabase
+        .from('crew_members')
+        .select('crew_id', { count: 'exact', head: true })
+        .eq('user_id', targetUserId),
+      supabase
+        .from('documents')
+        .select('id', { count: 'exact', head: true })
+        .eq('creator_id', targetUserId),
+      supabase
+        .from('activity_logs')
+        .select('action, created_at, entity_type, entity_id')
+        .eq('user_id', targetUserId)
+        .order('created_at', { ascending: false })
+        .limit(10),
+    ])
 
     return successResponse({
       profile: {
         ...profile,
         stats: {
-          projects: projectsCount || 0,
-          tasks: tasksCount || 0,
-          crews: crewCount || 0
+          projects: projectsRes.count ?? 0,
+          tasks: tasksRes.count ?? 0,
+          crews: crewRes.count ?? 0,
+          documents: docsRes.count ?? 0,
         },
-        recent_activity: recentActivity || []
-      }
+        recent_activity: activityRes.data ?? [],
+      },
     })
-
   } catch (error) {
     console.error('Get profile error:', error)
     return errorResponse(error.message || 'Failed to get profile')

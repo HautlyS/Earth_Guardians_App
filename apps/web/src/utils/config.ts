@@ -62,6 +62,7 @@ export const config = {
     cspEnabled: import.meta.env.VITE_CSP_ENABLED !== 'false',
     cspReportUri: import.meta.env.VITE_CSP_REPORT_URI || '/api/csp-report'
   }
-} as const
+}
 
+export type AppConfig = typeof config
 export default config

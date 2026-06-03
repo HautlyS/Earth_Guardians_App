@@ -1,9 +1,9 @@
 <template>
   <div class="home-view container">
     <section class="hero">
-      <h2 class="text-3xl font-display mt-xl mb-lg">Welcome to Earth Guardians</h2>
-      <p class="text-lg mb-xl">Neo-brutalist collaborative platform with P2P, WASM, and decentralized storage.</p>
-      
+      <h1 class="hero-title">Welcome to Earth Guardians</h1>
+      <p class="hero-sub">A neo-brutalist platform for organising crews, projects, and P2P collaboration.</p>
+
       <div v-if="!isAuthenticated" class="auth-prompt card">
         <div class="card-body">
           <p>Sign in to access projects, tasks, and collaborative features.</p>
@@ -18,14 +18,26 @@
           <h3 class="card-title">🤝 P2P NETWORK</h3>
         </div>
         <div class="card-body">
-          <p><strong>Peer ID:</strong> <code>{{ peerStats.peerId || 'Not connected' }}</code></p>
-          <p><strong>Connected Peers:</strong> <span class="badge">{{ peerStats.connectedPeers }}</span></p>
-          <p><strong>STUN Servers:</strong> <span class="badge">{{ peerStats.stunServers }}</span></p>
+          <p><strong>Peer ID:</strong> <code class="peer-id">{{ shortPeerId || 'Not connected' }}</code></p>
+          <p><strong>Connected Peers:</strong> <span class="badge">{{ p2pStore.connectedPeers.length }}</span></p>
+          <p><strong>STUN Servers:</strong> <span class="badge">{{ p2pStore.stunServers.length }}</span></p>
           <div class="mt-md">
-            <button @click="connectP2P" class="btn btn-primary" :disabled="p2pLoading">
-              {{ p2pLoading ? 'Connecting...' : 'Connect' }}
+            <button
+              v-if="!isAuthenticated"
+              class="btn btn-primary"
+              disabled
+              :aria-disabled="true"
+            >
+              Sign in to connect
             </button>
-            <button @click="disconnectP2P" class="btn btn-secondary" :disabled="!isP2PConnected">Disconnect</button>
+            <template v-else>
+              <button @click="connectP2P" class="btn btn-primary" :disabled="p2pStore.loading">
+                {{ p2pStore.loading ? 'Connecting…' : (p2pStore.isConnected ? 'Reconnect' : 'Connect') }}
+              </button>
+              <button @click="p2pStore.disconnect()" class="btn btn-secondary" :disabled="!p2pStore.isConnected">
+                Disconnect
+              </button>
+            </template>
           </div>
         </div>
       </div>
@@ -35,16 +47,20 @@
           <h3 class="card-title">⚡ WASM ENGINE</h3>
         </div>
         <div class="card-body">
-          <p><strong>Status:</strong> <span :class="['badge', wasmReady ? 'badge-success' : 'badge-warning']">
-            {{ wasmReady ? 'Ready' : 'Loading' }}
-          </span></p>
+          <p>
+            <strong>Status:</strong>
+            <span :class="['badge', wasmReady ? 'badge-success' : 'badge-warning']">
+              {{ wasmReady ? 'Ready' : 'Loading' }}
+            </span>
+          </p>
           <p><strong>Compressor:</strong> <span class="badge">{{ compressorStatus }}</span></p>
           <p><strong>Hasher:</strong> <span class="badge">{{ hasherStatus }}</span></p>
           <div class="mt-md">
             <button @click="runWasmTest" class="btn btn-primary" :disabled="!wasmReady">
-              Run Test
+              Run Round-Trip Test
             </button>
           </div>
+          <p v-if="wasmError" class="text-error text-sm mt-sm">{{ wasmError }}</p>
         </div>
       </div>
 
@@ -53,13 +69,22 @@
           <h3 class="card-title">🌐 SUPABASE</h3>
         </div>
         <div class="card-body">
-          <p><strong>Status:</strong> <span :class="['badge', dbConnected ? 'badge-success' : 'badge-warning']">
-            {{ dbConnected ? 'Connected' : 'Disconnected' }}
-          </span></p>
-          <p><strong>Real-time:</strong> <span class="badge">{{ realtimeEnabled ? 'Active' : 'Inactive' }}</span></p>
+          <p>
+            <strong>Status:</strong>
+            <span :class="['badge', dbConnected ? 'badge-success' : 'badge-warning']">
+              {{ dbConnected ? 'Connected' : 'Disconnected' }}
+            </span>
+          </p>
+          <p>
+            <strong>Realtime:</strong>
+            <span class="badge">{{ realtimeEnabled ? 'Subscribed' : 'Inactive' }}</span>
+          </p>
           <div class="mt-md">
-            <button @click="testSupabase" class="btn btn-primary">Test Connection</button>
+            <button @click="probeSupabase" class="btn btn-primary" :disabled="probing">
+              {{ probing ? 'Probing…' : 'Probe' }}
+            </button>
           </div>
+          <p v-if="supabaseError" class="text-error text-sm mt-sm">{{ supabaseError }}</p>
         </div>
       </div>
     </div>
@@ -69,10 +94,10 @@
         <h3 class="card-title">📊 YOUR PROJECTS</h3>
       </div>
       <div class="card-body">
-        <div v-if="projectsStore.loading" class="loading">Loading projects...</div>
-        <div v-else-if="projectsStore.projects.length > 0" class="projects-list">
-          <router-link 
-            v-for="project in projectsStore.projects.slice(0, 5)" 
+        <div v-if="projectsStore.loading" class="loading">Loading projects…</div>
+        <div v-else-if="recentProjects.length > 0" class="projects-list">
+          <router-link
+            v-for="project in recentProjects"
             :key="project.id"
             :to="`/projects/${project.id}`"
             class="project-item"
@@ -83,7 +108,7 @@
         </div>
         <div v-else class="empty-state">
           <p>No projects yet. Create your first project!</p>
-          <router-link to="/projects" class="btn btn-primary">View Projects</router-link>
+          <router-link to="/projects" class="btn btn-primary">Go to Projects</router-link>
         </div>
       </div>
     </div>
@@ -94,10 +119,9 @@
       </div>
       <div class="card-body">
         <div class="actions-grid">
-          <button @click="exportData" class="btn btn-primary">Export Data</button>
-          <button @click="importData" class="btn btn-secondary">Import Data</button>
+          <button @click="exportData" class="btn btn-primary">Export Peer State</button>
           <button @click="runDiagnostics" class="btn btn-secondary">Diagnostics</button>
-          <button @click="clearCache" class="btn btn-danger">Clear Cache</button>
+          <button @click="clearCache" class="btn btn-danger">Clear Local Cache</button>
         </div>
       </div>
     </div>
@@ -106,75 +130,102 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { useProjectsStore } from '../stores/projects'
 import { useUIStore } from '../stores/ui'
 import { useP2PStore } from '../stores/p2p'
+import { useNotificationsStore } from '../stores/notifications'
+import { supabase, isConfigured } from '../lib/supabase'
+import { initializeWasm, isWasmAvailable, compress, decompress, hash } from '../utils/wasm'
 
+const route = useRoute()
 const authStore = useAuthStore()
 const projectsStore = useProjectsStore()
 const uiStore = useUIStore()
 const p2pStore = useP2PStore()
+const notificationsStore = useNotificationsStore()
 
 const isAuthenticated = computed(() => authStore.isAuthenticated)
+const recentProjects = computed(() => projectsStore.projects.slice(0, 5))
+const shortPeerId = computed(() => {
+  const id = p2pStore.localPeerId
+  if (!id) return ''
+  return id.length > 16 ? `${id.slice(0, 8)}…${id.slice(-6)}` : id
+})
 
-// P2P State
-const p2pLoading = ref(false)
-const peerStats = computed(() => ({
-  peerId: p2pStore.localPeerId || 'Not connected',
-  connectedPeers: p2pStore.connectedPeers.length,
-  stunServers: p2pStore.stunServers.length
-}))
-const isP2PConnected = computed(() => p2pStore.isConnected)
-
-// WASM State
 const wasmReady = ref(false)
+const wasmError = ref('')
 const compressorStatus = ref('idle')
 const hasherStatus = ref('idle')
 
-// Supabase State
 const dbConnected = ref(false)
 const realtimeEnabled = ref(false)
-
-// Performance
-const buildTime = ref(Date.now() - (window as any).__START_TIME__ || 0)
+const probing = ref(false)
+const supabaseError = ref('')
 
 async function connectP2P() {
-  p2pLoading.value = true
+  if (!authStore.isAuthenticated) {
+    uiStore.openAuthModal()
+    return
+  }
   try {
-    const peerId = `web_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 11)}`
-    await p2pStore.registerPeer(peerId)
+    const result = await p2pStore.registerPeer()
+    if (result.success) {
+      p2pStore.subscribeToSignals()
+      uiStore.showSuccess('P2P network ready')
+    } else {
+      uiStore.showError(result.error || 'Failed to connect')
+    }
   } catch (e) {
     console.error('P2P connect failed:', e)
-  } finally {
-    p2pLoading.value = false
+    uiStore.showError('P2P connect failed')
   }
-}
-
-function disconnectP2P() {
-  p2pStore.disconnect()
 }
 
 async function runWasmTest() {
   if (!wasmReady.value) return
-  
+  compressorStatus.value = 'testing'
+  hasherStatus.value = 'testing'
   try {
-    compressorStatus.value = 'testing'
-    const testData = new Uint8Array(1024).fill(65)
+    const sample = new TextEncoder().encode('Earth Guardians round-trip test — 漢字 OK')
+    const compressed = await compress(sample)
+    const decompressed = await decompress(compressed)
+    const text = new TextDecoder().decode(decompressed)
+    if (text !== new TextDecoder().decode(sample)) {
+      throw new Error('Round-trip mismatch')
+    }
+    const h = await hash(sample)
+    if (!h || h.length < 8) throw new Error('Hash empty')
     compressorStatus.value = 'ready'
-    
-    hasherStatus.value = 'testing'
     hasherStatus.value = 'ready'
+    uiStore.showSuccess('WASM round-trip OK')
   } catch (e) {
     console.error('WASM test failed:', e)
     compressorStatus.value = 'error'
     hasherStatus.value = 'error'
+    uiStore.showError('WASM round-trip failed')
   }
 }
 
-async function testSupabase() {
-  dbConnected.value = true
-  realtimeEnabled.value = true
+async function probeSupabase() {
+  probing.value = true
+  supabaseError.value = ''
+  try {
+    if (!isConfigured()) {
+      throw new Error('Supabase env vars are not set')
+    }
+    const { error } = await supabase.from('profiles').select('id', { count: 'exact', head: true })
+    if (error) throw error
+    dbConnected.value = true
+    realtimeEnabled.value = true
+  } catch (e) {
+    supabaseError.value = e instanceof Error ? e.message : 'Probe failed'
+    dbConnected.value = false
+    realtimeEnabled.value = false
+  } finally {
+    probing.value = false
+  }
 }
 
 function getStatusBadgeClass(status: string) {
@@ -182,15 +233,17 @@ function getStatusBadgeClass(status: string) {
     planning: 'badge-info',
     active: 'badge-success',
     on_hold: 'badge-warning',
-    completed: 'badge-secondary'
+    completed: 'badge-secondary',
+    archived: 'badge-secondary'
   }
   return classes[status] || ''
 }
 
 function exportData() {
   const data = {
-    peerId: peerStats.value.peerId,
-    timestamp: Date.now()
+    peerId: p2pStore.localPeerId,
+    userId: authStore.userId,
+    timestamp: new Date().toISOString()
   }
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
   const url = URL.createObjectURL(blob)
@@ -201,39 +254,30 @@ function exportData() {
   URL.revokeObjectURL(url)
 }
 
-function importData() {
-  const input = document.createElement('input')
-  input.type = 'file'
-  input.accept = '.json'
-  input.onchange = async (e) => {
-    const file = (e.target as HTMLInputElement).files?.[0]
-    if (file) {
-      const text = await file.text()
-      const data = JSON.parse(text)
-      console.log('Imported data:', data)
-      uiStore.showSuccess('Data imported successfully!')
-    }
-  }
-  input.click()
-}
-
-function runDiagnostics() {
-  console.log('Running diagnostics...')
+async function runDiagnostics() {
   const diagnostics = {
-    wasmReady: wasmReady.value,
-    p2pConnected: isP2PConnected.value,
-    dbConnected: dbConnected.value,
-    buildTime: buildTime.value
+    auth: authStore.isAuthenticated,
+    supabase: dbConnected.value,
+    realtime: realtimeEnabled.value,
+    p2p: p2pStore.isConnected,
+    peerId: p2pStore.localPeerId || null,
+    wasm: wasmReady.value,
+    route: route.fullPath
   }
   console.table(diagnostics)
-  uiStore.showInfo('Check console for diagnostic details')
+  uiStore.showInfo('Diagnostics printed to console')
 }
 
-function clearCache() {
-  if (confirm('Clear all cached data?')) {
+async function clearCache() {
+  const ok = await uiStore.confirm('Clear all local cache (theme, peerId, session)?')
+  if (!ok) return
+  try {
     localStorage.clear()
     sessionStorage.clear()
-    window.location.reload()
+    uiStore.showSuccess('Local cache cleared — reloading')
+    setTimeout(() => window.location.reload(), 600)
+  } catch (e) {
+    console.error('Cache clear failed:', e)
   }
 }
 
@@ -242,22 +286,23 @@ function openAuthModal() {
 }
 
 onMounted(async () => {
-  if (isAuthenticated.value) {
-    await projectsStore.fetchProjects({ limit: 5 })
-  }
-  
-  // Initialize WASM
+  // Real WASM init
   try {
-    wasmReady.value = true
-    compressorStatus.value = 'ready'
-    hasherStatus.value = 'ready'
+    await initializeWasm()
+    wasmReady.value = isWasmAvailable()
   } catch (e) {
-    console.warn('WASM initialization failed:', e)
+    wasmReady.value = false
+    wasmError.value = e instanceof Error ? e.message : 'WASM init failed'
   }
-  
-  // Initialize Supabase connection
-  dbConnected.value = true
-  realtimeEnabled.value = true
+
+  // Real Supabase probe
+  await probeSupabase()
+
+  // Auth-only side effects
+  if (authStore.isAuthenticated) {
+    await projectsStore.fetchProjects({ limit: 5 })
+    notificationsStore.fetchNotifications().catch((e) => console.error(e))
+  }
 })
 </script>
 
@@ -271,9 +316,27 @@ onMounted(async () => {
   margin-bottom: var(--spacing-xl);
 }
 
+.hero-title {
+  font-size: 2.5rem;
+  font-weight: 800;
+  margin: 0 0 var(--spacing-md) 0;
+}
+
+.hero-sub {
+  font-size: 1.125rem;
+  color: var(--text-muted);
+  max-width: 640px;
+  margin: 0 auto var(--spacing-lg) auto;
+}
+
 .auth-prompt {
   max-width: 400px;
-  margin: 0 auto;
+  margin: var(--spacing-lg) auto 0;
+}
+
+.peer-id {
+  font-size: var(--text-xs);
+  word-break: break-all;
 }
 
 .projects-list {
@@ -312,9 +375,21 @@ onMounted(async () => {
   color: var(--text-muted);
 }
 
+.text-error {
+  color: var(--error-color);
+}
+
+.text-sm {
+  font-size: var(--text-sm);
+}
+
+.mt-sm {
+  margin-top: var(--spacing-sm);
+}
+
 .actions-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: var(--spacing-md);
 }
 
@@ -324,6 +399,9 @@ onMounted(async () => {
   .grid-cols-3,
   .actions-grid {
     grid-template-columns: 1fr;
+  }
+  .hero-title {
+    font-size: 1.75rem;
   }
 }
 </style>

@@ -1,46 +1,55 @@
 <template>
-  <div class="notification-bell">
-    <button class="bell-btn" @click="toggleNotifications">
-      🔔
-      <span v-if="unreadCount > 0" class="badge">{{ displayCount }}</span>
+  <div class="notification-bell" ref="rootRef">
+    <button
+      class="bell-btn"
+      @click="toggleNotifications"
+      :aria-label="`Notifications, ${unreadCount} unread`"
+      :aria-expanded="isOpen"
+      aria-haspopup="menu"
+    >
+      <span aria-hidden="true">🔔</span>
+      <span v-if="unreadCount > 0" class="badge" aria-hidden="true">{{ displayCount }}</span>
     </button>
 
-    <div v-if="isOpen" class="notifications-dropdown">
+    <div v-if="isOpen" class="notifications-dropdown" role="menu">
       <div class="dropdown-header">
         <h3>Notifications</h3>
-        <button v-if="unreadCount > 0" class="mark-read-btn" @click="markAllRead">
-          Mark all read
+        <button
+          v-if="unreadCount > 0"
+          class="mark-read-btn"
+          @click="markAllRead"
+          :disabled="marking"
+        >
+          {{ marking ? 'Marking…' : 'Mark all read' }}
         </button>
       </div>
 
       <div class="notifications-list" v-if="notifications.length > 0">
-        <div 
-          v-for="notification in notifications" 
+        <button
+          v-for="notification in notifications"
           :key="notification.id"
           :class="['notification-item', { unread: !notification.is_read }]"
           @click="handleNotificationClick(notification)"
+          type="button"
+          role="menuitem"
         >
           <div class="notification-content">
             <p class="notification-title">{{ notification.title }}</p>
             <p v-if="notification.body" class="notification-body">{{ notification.body }}</p>
             <span class="notification-time">{{ formatTime(notification.created_at) }}</span>
           </div>
-        </div>
+        </button>
       </div>
 
       <div v-else class="empty-notifications">
         <p>No notifications yet</p>
-      </div>
-
-      <div class="dropdown-footer">
-        <router-link to="/notifications" class="view-all">View all</router-link>
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { useNotificationsStore, type Notification } from '../stores/notifications'
 import { useAuthStore } from '../stores/auth'
@@ -49,58 +58,73 @@ const router = useRouter()
 const notificationsStore = useNotificationsStore()
 const authStore = useAuthStore()
 
+const rootRef = ref<HTMLElement | null>(null)
 const isOpen = ref(false)
+const marking = ref(false)
 
 const notifications = computed(() => notificationsStore.notifications.slice(0, 5))
 const unreadCount = computed(() => notificationsStore.unreadCount)
-const displayCount = computed(() => unreadCount.value > 99 ? '99+' : unreadCount.value)
+const displayCount = computed(() => (unreadCount.value > 99 ? '99+' : String(unreadCount.value)))
 
 function toggleNotifications() {
   isOpen.value = !isOpen.value
   if (isOpen.value && notifications.value.length === 0) {
-    notificationsStore.fetchNotifications()
+    notificationsStore.fetchNotifications().catch((e) => console.error(e))
   }
 }
 
 async function markAllRead() {
-  await notificationsStore.markAllAsRead()
+  if (marking.value) return
+  marking.value = true
+  try {
+    await notificationsStore.markAllAsRead()
+  } finally {
+    marking.value = false
+  }
 }
 
 function handleNotificationClick(notification: Notification) {
-  notificationsStore.markAsRead(notification.id)
-  if (notification.data?.task_id) {
-    router.push(`/tasks/${notification.data.task_id}`)
-  }
+  notificationsStore.markAsRead(notification.id).catch((e) => console.error(e))
+  const data = (notification as unknown as { data?: { task_id?: string; project_id?: string } }).data
+  if (data?.task_id) router.push(`/tasks`).catch(() => {})
+  else if (data?.project_id) router.push(`/projects/${data.project_id}`).catch(() => {})
   isOpen.value = false
 }
 
 function formatTime(dateString: string) {
   const date = new Date(dateString)
+  if (Number.isNaN(date.getTime())) return ''
   const now = new Date()
   const diff = now.getTime() - date.getTime()
-  
-  if (diff < 60000) return 'Just now'
-  if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`
-  if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`
+  if (diff < 60_000) return 'Just now'
+  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`
+  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`
   return date.toLocaleDateString()
 }
 
-function handleClickOutside(e: MouseEvent) {
-  const target = e.target as HTMLElement
-  if (!target.closest('.notification-bell')) {
+function onDocumentClick(e: MouseEvent) {
+  if (!isOpen.value) return
+  const target = e.target as Node | null
+  if (target && rootRef.value && !rootRef.value.contains(target)) {
     isOpen.value = false
   }
 }
 
+function onKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape' && isOpen.value) isOpen.value = false
+}
+
 onMounted(() => {
-  document.addEventListener('click', handleClickOutside)
+  document.addEventListener('click', onDocumentClick)
+  document.addEventListener('keydown', onKeydown)
   if (authStore.userId) {
-    notificationsStore.fetchNotifications()
+    notificationsStore.fetchNotifications().catch((e) => console.error(e))
   }
 })
 
-onUnmounted(() => {
-  document.removeEventListener('click', handleClickOutside)
+onBeforeUnmount(() => {
+  document.removeEventListener('click', onDocumentClick)
+  document.removeEventListener('keydown', onKeydown)
 })
 </script>
 
@@ -116,10 +140,13 @@ onUnmounted(() => {
   cursor: pointer;
   padding: var(--spacing-sm);
   font-size: 1.2rem;
+  line-height: 1;
 }
 
-.bell-btn:hover {
+.bell-btn:hover,
+.bell-btn:focus-visible {
   background: var(--bg-secondary);
+  outline: none;
 }
 
 .badge {
@@ -133,6 +160,7 @@ onUnmounted(() => {
   border-radius: 10px;
   min-width: 18px;
   text-align: center;
+  font-weight: bold;
 }
 
 .notifications-dropdown {
@@ -168,19 +196,33 @@ onUnmounted(() => {
   font-size: var(--text-sm);
 }
 
+.mark-read-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .notifications-list {
   max-height: 400px;
   overflow-y: auto;
 }
 
 .notification-item {
+  display: block;
+  width: 100%;
+  text-align: left;
   padding: var(--spacing-md);
+  border: none;
   border-bottom: 1px solid var(--bg-secondary);
   cursor: pointer;
+  background: transparent;
+  color: inherit;
+  font: inherit;
 }
 
-.notification-item:hover {
+.notification-item:hover,
+.notification-item:focus-visible {
   background: var(--bg-secondary);
+  outline: none;
 }
 
 .notification-item.unread {
@@ -208,16 +250,5 @@ onUnmounted(() => {
   padding: var(--spacing-xl);
   text-align: center;
   color: var(--text-muted);
-}
-
-.dropdown-footer {
-  padding: var(--spacing-md);
-  text-align: center;
-  border-top: 1px solid var(--border-color);
-}
-
-.view-all {
-  color: var(--accent-color);
-  text-decoration: none;
 }
 </style>

@@ -1,45 +1,70 @@
 <template>
-  <div :class="['user-avatar', `size-${size}`]">
-    <img 
-      v-if="src" 
-      :src="src" 
-      :alt="name" 
+  <div :class="['user-avatar', `size-${size}`]" :title="name">
+    <img
+      v-if="effectiveSrc"
+      :src="effectiveSrc"
+      :alt="name"
       class="avatar-img"
-      @error="handleImageError"
+      @error="onImageError"
     />
-    <span v-else class="avatar-initials">{{ initials }}</span>
-    <span v-if="showStatus" :class="['status-dot', statusClass]"></span>
+    <span v-else class="avatar-initials" aria-hidden="true">{{ initials }}</span>
+    <span
+      v-if="showStatus"
+      :class="['status-dot', statusClass]"
+      :aria-label="online ? 'Online' : 'Offline'"
+    ></span>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 
-const props = withDefaults(defineProps<{
-  src?: string | null
-  name: string
-  size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl'
-  showStatus?: boolean
-  online?: boolean
-}>(), {
-  size: 'md',
-  showStatus: false,
-  online: false
-})
+const props = withDefaults(
+  defineProps<{
+    src?: string | null
+    name: string
+    size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl'
+    showStatus?: boolean
+    online?: boolean
+  }>(),
+  {
+    size: 'md',
+    showStatus: false,
+    online: false
+  }
+)
 
 const imageError = ref(false)
+const attemptedSrc = ref<string | null>(null)
 
-const initials = computed(() => {
-  const parts = props.name.trim().split(' ')
-  if (parts.length >= 2) {
-    return (parts[0][0] + parts[1][0]).toUpperCase()
-  }
-  return (props.name[0] || '?').toUpperCase()
+watch(
+  () => props.src,
+  () => {
+    if (props.src !== attemptedSrc.value) {
+      imageError.value = false
+      attemptedSrc.value = props.src ?? null
+    }
+  },
+  { immediate: true }
+)
+
+const effectiveSrc = computed(() => {
+  if (!props.src) return null
+  if (imageError.value) return null
+  return props.src
 })
 
-const statusClass = computed(() => props.online ? 'online' : 'offline')
+const initials = computed(() => {
+  const cleaned = props.name.trim()
+  if (!cleaned) return '?'
+  const parts = cleaned.split(/\s+/)
+  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase()
+  return cleaned[0].toUpperCase()
+})
 
-function handleImageError() {
+const statusClass = computed(() => (props.online ? 'online' : 'offline'))
+
+function onImageError() {
   imageError.value = true
 }
 </script>
@@ -55,6 +80,8 @@ function handleImageError() {
   color: var(--bg-primary);
   font-weight: bold;
   border: 2px solid var(--border-color);
+  flex-shrink: 0;
+  overflow: hidden;
 }
 
 .size-xs { width: 24px; height: 24px; font-size: 10px; }
@@ -72,6 +99,7 @@ function handleImageError() {
 
 .avatar-initials {
   text-transform: uppercase;
+  user-select: none;
 }
 
 .status-dot {

@@ -1,17 +1,20 @@
 /**
- * WASM Module Loader - Legacy wrapper
- * 
- * This module provides a compatibility layer for code that imports from this file.
- * WASM classes (Compressor, Hasher, P2PUtils) should be imported directly from
- * '@shared/earth_guardians_shared' and initialized with the default export.
- * 
- * @deprecated Use direct imports from @shared/earth_guardians_shared instead
+ * WASM Module Loader
+ *
+ * Lazy-loads the @earth-guardians/shared WASM module on first use.
+ * The shared package's pkg/ directory is built locally and gitignored,
+ * so the import is wrapped in a try/catch — the app works in pure JS
+ * mode when the WASM artifact is absent (fresh clone without build).
  */
-
-import init, { Compressor, Hasher, P2PUtils } from '@shared/earth_guardians_shared'
+import type { Compressor, Hasher, P2PUtils } from '@earth-guardians/shared'
 
 let wasmInitialized = false
-let wasmModule: any = null
+let wasmModule: {
+  Compressor: typeof Compressor
+  Hasher: typeof Hasher
+  P2PUtils: typeof P2PUtils
+} | null = null
+let initPromise: Promise<void> | null = null
 
 export interface WasmExports {
   Compressor: typeof Compressor
@@ -33,121 +36,91 @@ export interface P2PUtilsInstance {
   generate_peer_id(): string
 }
 
-/**
- * Initialize WASM module
- * Must be called before using any WASM functionality
- */
 export async function initializeWasm(): Promise<void> {
   if (wasmInitialized) return
+  if (initPromise) return initPromise
 
-  try {
-    await init()
-    wasmModule = { Compressor, Hasher, P2PUtils }
-    wasmInitialized = true
-    console.log('[WASM] Initialized successfully')
-  } catch (error) {
-    console.warn('[WASM] Failed to initialize, running in fallback mode:', error)
-    wasmInitialized = false
-  }
+  initPromise = (async () => {
+    try {
+      const mod = await import('@earth-guardians/shared')
+      const init = (mod as { default?: () => unknown }).default
+      if (typeof init === 'function') {
+        await (init as () => Promise<void> | void)()
+      }
+      wasmModule = {
+        Compressor: (mod as { Compressor: typeof Compressor }).Compressor,
+        Hasher: (mod as { Hasher: typeof Hasher }).Hasher,
+        P2PUtils: (mod as { P2PUtils: typeof P2PUtils }).P2PUtils,
+      }
+      wasmInitialized = true
+    } catch (err) {
+      console.warn('[WASM] Falling back to JS implementation:', err)
+      wasmInitialized = false
+      wasmModule = null
+    }
+  })()
+
+  return initPromise
 }
 
-/**
- * Check if WASM is available
- */
 export function isWasmAvailable(): boolean {
   return wasmInitialized && wasmModule !== null
 }
 
-/**
- * Get WASM module instance
- */
 export function getWasm(): WasmExports | null {
   return wasmModule
 }
 
-/**
- * Test compressor functionality
- */
-export function testCompressor(data: Uint8Array): Uint8Array {
-  if (!isWasmAvailable()) {
-    // Fallback: return data as-is
-    return data
+function fallbackHash(data: Uint8Array): string {
+  let h1 = 0xdeadbeef ^ data.length
+  let h2 = 0x41c6ce57 ^ data.length
+  for (let i = 0; i < data.length; i++) {
+    const c = data[i]
+    h1 = Math.imul(h1 ^ c, 2654435761)
+    h2 = Math.imul(h2 ^ c, 1597334677)
   }
-  const compressor = new wasmModule.Compressor()
-  return compressor.compress(data)
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909)
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909)
+  return (h2 >>> 0).toString(16).padStart(8, '0') + (h1 >>> 0).toString(16).padStart(8, '0')
 }
 
-/**
- * Test hasher functionality
- */
-export function testHasher(data: Uint8Array): string {
-  if (!isWasmAvailable()) {
-    // Fallback: simple hash
-    let hash = 0
-    for (let i = 0; i < data.length; i++) {
-      hash = ((hash << 5) - hash + data[i]) | 0
-    }
-    return Math.abs(hash).toString(16)
+function fallbackPeerId(): string {
+  const bytes = new Uint8Array(16)
+  if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+    crypto.getRandomValues(bytes)
+  } else {
+    for (let i = 0; i < bytes.length; i++) bytes[i] = Math.floor(Math.random() * 256)
   }
-  const hasher = new wasmModule.Hasher()
-  hasher.update(data)
-  return hasher.finish()
+  let s = 'peer_'
+  for (let i = 0; i < bytes.length; i++) s += bytes[i].toString(16).padStart(2, '0')
+  return s
 }
 
-/**
- * Generate peer ID
- */
-export function generatePeerId(): string {
-  if (!isWasmAvailable()) {
-    // Fallback: generate in JS
-    return `peer_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 11)}`
-  }
-  const p2p = new wasmModule.P2PUtils()
-  return p2p.generate_peer_id()
-}
-
-/**
- * Compress data using WASM
- */
 export function compress(data: Uint8Array): Uint8Array {
-  if (!isWasmAvailable()) {
-    console.warn('[WASM] Not available, skipping compression')
-    return data
-  }
-  const compressor = new wasmModule.Compressor()
-  return compressor.compress(data)
+  if (!isWasmAvailable() || !wasmModule) return data
+  return new wasmModule.Compressor().compress(data)
 }
 
-/**
- * Decompress data using WASM
- */
 export function decompress(data: Uint8Array): Uint8Array {
-  if (!isWasmAvailable()) {
+  if (!isWasmAvailable() || !wasmModule) {
     console.warn('[WASM] Not available, skipping decompression')
     return data
   }
-  const compressor = new wasmModule.Compressor()
-  return compressor.decompress(data)
+  return new wasmModule.Compressor().decompress(data)
 }
 
-/**
- * Hash data using WASM
- */
 export function hash(data: Uint8Array): string {
-  if (!isWasmAvailable()) {
-    // Fallback
-    let hash = 0
-    for (let i = 0; i < data.length; i++) {
-      hash = ((hash << 5) - hash + data[i]) | 0
-    }
-    return Math.abs(hash).toString(16)
-  }
+  if (!isWasmAvailable() || !wasmModule) return fallbackHash(data)
   const hasher = new wasmModule.Hasher()
   hasher.update(data)
   return hasher.finish()
 }
 
-// Re-export for convenience
+export function generatePeerId(): string {
+  if (!isWasmAvailable() || !wasmModule) return fallbackPeerId()
+  return new wasmModule.P2PUtils().generate_peer_id()
+}
+
 export default {
   initializeWasm,
   isWasmAvailable,
@@ -156,6 +129,4 @@ export default {
   decompress,
   hash,
   generatePeerId,
-  testCompressor,
-  testHasher
 }

@@ -1,6 +1,5 @@
-import { beforeAll, afterEach, afterAll } from 'vitest'
+import { beforeAll, afterEach, afterAll, vi } from 'vitest'
 import { cleanup } from '@vue/test-utils'
-import '@testing-library/jest-dom'
 
 // Global test setup
 beforeAll(() => {
